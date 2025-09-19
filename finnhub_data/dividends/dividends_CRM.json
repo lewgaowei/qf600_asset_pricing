@@ -1,0 +1,91 @@
+{
+  "symbol": "CRM",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:35:55.383893",
+  "data": [
+    {
+      "adjustedAmount": 0.4,
+      "amount": 0.4,
+      "currency": "USD",
+      "date": "2024-03-13",
+      "declarationDate": "2024-02-28",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-04-11",
+      "recordDate": "2024-03-14",
+      "symbol": "CRM"
+    },
+    {
+      "adjustedAmount": 0.4,
+      "amount": 0.4,
+      "currency": "USD",
+      "date": "2024-07-09",
+      "declarationDate": "2024-06-28",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-07-25",
+      "recordDate": "2024-07-09",
+      "symbol": "CRM"
+    },
+    {
+      "adjustedAmount": 0.4,
+      "amount": 0.4,
+      "currency": "USD",
+      "date": "2024-09-18",
+      "declarationDate": "2024-09-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-10-08",
+      "recordDate": "2024-09-18",
+      "symbol": "CRM"
+    },
+    {
+      "adjustedAmount": 0.4,
+      "amount": 0.4,
+      "currency": "USD",
+      "date": "2024-12-18",
+      "declarationDate": "2024-12-06",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-01-09",
+      "recordDate": "2024-12-18",
+      "symbol": "CRM"
+    },
+    {
+      "adjustedAmount": 0.416,
+      "amount": 0.416,
+      "currency": "USD",
+      "date": "2025-04-10",
+      "declarationDate": "2025-03-27",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-04-24",
+      "recordDate": "2025-04-10",
+      "symbol": "CRM"
+    },
+    {
+      "adjustedAmount": 0.416,
+      "amount": 0.416,
+      "currency": "USD",
+      "date": "2025-06-18",
+      "declarationDate": "2025-06-06",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-07-10",
+      "recordDate": "2025-06-18",
+      "symbol": "CRM"
+    },
+    {
+      "adjustedAmount": 0.416,
+      "amount": 0.416,
+      "currency": "USD",
+      "date": "2025-09-17",
+      "declarationDate": "2025-09-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-10-09",
+      "recordDate": "2025-09-17",
+      "symbol": "CRM"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "symbol": "REGN",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:35:50.724613",
+  "data": [
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2025-02-20",
+      "declarationDate": "2025-02-04",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-03-20",
+      "recordDate": "2025-02-20",
+      "symbol": "REGN"
+    },
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2025-05-20",
+      "declarationDate": "2025-04-29",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-06-06",
+      "recordDate": "2025-05-20",
+      "symbol": "REGN"
+    },
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2025-08-18",
+      "declarationDate": "2025-08-01",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-09-03",
+      "recordDate": "2025-08-18",
+      "symbol": "REGN"
+    }
+  ]
+}

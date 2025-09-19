@@ -1,0 +1,19 @@
+{
+  "symbol": "APTV",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:33:11.256681",
+  "data": [
+    {
+      "adjustedAmount": 0.22,
+      "amount": 0.22,
+      "currency": "USD",
+      "date": "2020-02-04",
+      "declarationDate": "2020-01-23",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2020-02-19",
+      "recordDate": "2020-02-05",
+      "symbol": "APTV"
+    }
+  ]
+}

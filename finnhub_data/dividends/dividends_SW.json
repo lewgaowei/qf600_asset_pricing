@@ -1,0 +1,67 @@
+{
+  "symbol": "SW",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:35:58.425677",
+  "data": [
+    {
+      "adjustedAmount": 0.3025,
+      "amount": 0.3025,
+      "currency": "USD",
+      "date": "2024-08-15",
+      "declarationDate": "2024-07-26",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-09-18",
+      "recordDate": "2024-08-15",
+      "symbol": "SW"
+    },
+    {
+      "adjustedAmount": 0.3025,
+      "amount": 0.3025,
+      "currency": "USD",
+      "date": "2024-11-15",
+      "declarationDate": "2024-10-25",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-12-18",
+      "recordDate": "2024-11-15",
+      "symbol": "SW"
+    },
+    {
+      "adjustedAmount": 0.4308,
+      "amount": 0.4308,
+      "currency": "USD",
+      "date": "2025-02-14",
+      "declarationDate": "2025-01-30",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-03-18",
+      "recordDate": "2025-02-14",
+      "symbol": "SW"
+    },
+    {
+      "adjustedAmount": 0.4308,
+      "amount": 0.4308,
+      "currency": "USD",
+      "date": "2025-05-16",
+      "declarationDate": "2025-05-01",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-06-18",
+      "recordDate": "2025-05-16",
+      "symbol": "SW"
+    },
+    {
+      "adjustedAmount": 0.4308,
+      "amount": 0.4308,
+      "currency": "USD",
+      "date": "2025-08-15",
+      "declarationDate": "2025-07-30",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-09-18",
+      "recordDate": "2025-08-15",
+      "symbol": "SW"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "symbol": "VLTO",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:36:18.573221",
+  "data": [
+    {
+      "adjustedAmount": 0.09,
+      "amount": 0.09,
+      "currency": "USD",
+      "date": "2023-12-28",
+      "declarationDate": "2023-12-20",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-01-31",
+      "recordDate": "2023-12-29",
+      "symbol": "VLTO"
+    },
+    {
+      "adjustedAmount": 0.09,
+      "amount": 0.09,
+      "currency": "USD",
+      "date": "2024-03-27",
+      "declarationDate": "2024-03-08",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-04-30",
+      "recordDate": "2024-03-28",
+      "symbol": "VLTO"
+    },
+    {
+      "adjustedAmount": 0.09,
+      "amount": 0.09,
+      "currency": "USD",
+      "date": "2024-06-28",
+      "declarationDate": "2024-05-22",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-07-31",
+      "recordDate": "2024-06-28",
+      "symbol": "VLTO"
+    },
+    {
+      "adjustedAmount": 0.09,
+      "amount": 0.09,
+      "currency": "USD",
+      "date": "2024-09-27",
+      "declarationDate": "2024-09-24",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-10-31",
+      "recordDate": "2024-09-27",
+      "symbol": "VLTO"
+    },
+    {
+      "adjustedAmount": 0.11,
+      "amount": 0.11,
+      "currency": "USD",
+      "date": "2024-12-31",
+      "declarationDate": "2024-12-19",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-01-31",
+      "recordDate": "2024-12-31",
+      "symbol": "VLTO"
+    },
+    {
+      "adjustedAmount": 0.11,
+      "amount": 0.11,
+      "currency": "USD",
+      "date": "2025-03-31",
+      "declarationDate": "2025-03-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-04-30",
+      "recordDate": "2025-03-31",
+      "symbol": "VLTO"
+    },
+    {
+      "adjustedAmount": 0.11,
+      "amount": 0.11,
+      "currency": "USD",
+      "date": "2025-06-30",
+      "declarationDate": "2025-05-15",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-07-31",
+      "recordDate": "2025-06-30",
+      "symbol": "VLTO"
+    }
+  ]
+}

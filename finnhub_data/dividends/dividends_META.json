@@ -1,0 +1,79 @@
+{
+  "symbol": "META",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:35:15.502867",
+  "data": [
+    {
+      "adjustedAmount": 0.5,
+      "amount": 0.5,
+      "currency": "USD",
+      "date": "2024-02-21",
+      "declarationDate": "2024-02-01",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-03-26",
+      "recordDate": "2024-02-22",
+      "symbol": "META"
+    },
+    {
+      "adjustedAmount": 0.5,
+      "amount": 0.5,
+      "currency": "USD",
+      "date": "2024-06-14",
+      "declarationDate": "2024-05-31",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-06-26",
+      "recordDate": "2024-06-14",
+      "symbol": "META"
+    },
+    {
+      "adjustedAmount": 0.5,
+      "amount": 0.5,
+      "currency": "USD",
+      "date": "2024-09-16",
+      "declarationDate": "2024-09-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-09-26",
+      "recordDate": "2024-09-16",
+      "symbol": "META"
+    },
+    {
+      "adjustedAmount": 0.5,
+      "amount": 0.5,
+      "currency": "USD",
+      "date": "2024-12-16",
+      "declarationDate": "2024-12-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-12-27",
+      "recordDate": "2024-12-16",
+      "symbol": "META"
+    },
+    {
+      "adjustedAmount": 0.525,
+      "amount": 0.525,
+      "currency": "USD",
+      "date": "2025-03-14",
+      "declarationDate": "2025-02-13",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-03-26",
+      "recordDate": "2025-03-14",
+      "symbol": "META"
+    },
+    {
+      "adjustedAmount": 0.525,
+      "amount": 0.525,
+      "currency": "USD",
+      "date": "2025-06-16",
+      "declarationDate": "2025-05-29",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-06-26",
+      "recordDate": "2025-06-16",
+      "symbol": "META"
+    }
+  ]
+}

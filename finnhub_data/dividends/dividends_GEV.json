@@ -1,0 +1,43 @@
+{
+  "symbol": "GEV",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:34:31.637851",
+  "data": [
+    {
+      "adjustedAmount": 0.25,
+      "amount": 0.25,
+      "currency": "USD",
+      "date": "2024-12-20",
+      "declarationDate": "2024-12-10",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-01-28",
+      "recordDate": "2024-12-20",
+      "symbol": "GEV"
+    },
+    {
+      "adjustedAmount": 0.25,
+      "amount": 0.25,
+      "currency": "USD",
+      "date": "2025-04-17",
+      "declarationDate": "2025-04-08",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-05-16",
+      "recordDate": "2025-04-18",
+      "symbol": "GEV"
+    },
+    {
+      "adjustedAmount": 0.25,
+      "amount": 0.25,
+      "currency": "USD",
+      "date": "2025-07-21",
+      "declarationDate": "2025-06-23",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-08-18",
+      "recordDate": "2025-07-21",
+      "symbol": "GEV"
+    }
+  ]
+}

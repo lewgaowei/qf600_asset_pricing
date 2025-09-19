@@ -1,0 +1,103 @@
+{
+  "symbol": "TMUS",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:36:04.519732",
+  "data": [
+    {
+      "adjustedAmount": 0.65,
+      "amount": 0.65,
+      "currency": "USD",
+      "date": "2023-11-30",
+      "declarationDate": "2023-09-25",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2023-12-15",
+      "recordDate": "2023-12-01",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.65,
+      "amount": 0.65,
+      "currency": "USD",
+      "date": "2024-02-29",
+      "declarationDate": "2024-01-24",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-03-14",
+      "recordDate": "2024-03-01",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.65,
+      "amount": 0.65,
+      "currency": "USD",
+      "date": "2024-05-31",
+      "declarationDate": "2024-03-15",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-06-13",
+      "recordDate": "2024-05-31",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.65,
+      "amount": 0.65,
+      "currency": "USD",
+      "date": "2024-08-30",
+      "declarationDate": "2024-06-13",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-09-12",
+      "recordDate": "2024-08-30",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2024-11-27",
+      "declarationDate": "2024-09-18",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-12-12",
+      "recordDate": "2024-11-27",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2025-02-28",
+      "declarationDate": "2024-11-21",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-03-13",
+      "recordDate": "2025-02-28",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2025-05-30",
+      "declarationDate": "2025-02-06",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-06-12",
+      "recordDate": "2025-05-30",
+      "symbol": "TMUS"
+    },
+    {
+      "adjustedAmount": 0.88,
+      "amount": 0.88,
+      "currency": "USD",
+      "date": "2025-08-29",
+      "declarationDate": "2025-06-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-09-11",
+      "recordDate": "2025-08-29",
+      "symbol": "TMUS"
+    }
+  ]
+}

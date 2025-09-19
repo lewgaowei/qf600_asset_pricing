@@ -1,0 +1,79 @@
+{
+  "symbol": "GOOGL",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:33:00.608917",
+  "data": [
+    {
+      "adjustedAmount": 0.2,
+      "amount": 0.2,
+      "currency": "USD",
+      "date": "2024-06-10",
+      "declarationDate": "2024-04-25",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-06-17",
+      "recordDate": "2024-06-10",
+      "symbol": "GOOGL"
+    },
+    {
+      "adjustedAmount": 0.2,
+      "amount": 0.2,
+      "currency": "USD",
+      "date": "2024-09-09",
+      "declarationDate": "2024-07-23",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-09-16",
+      "recordDate": "2024-09-09",
+      "symbol": "GOOGL"
+    },
+    {
+      "adjustedAmount": 0.2,
+      "amount": 0.2,
+      "currency": "USD",
+      "date": "2024-12-09",
+      "declarationDate": "2024-10-29",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2024-12-16",
+      "recordDate": "2024-12-09",
+      "symbol": "GOOGL"
+    },
+    {
+      "adjustedAmount": 0.2,
+      "amount": 0.2,
+      "currency": "USD",
+      "date": "2025-03-10",
+      "declarationDate": "2025-02-07",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-03-17",
+      "recordDate": "2025-03-10",
+      "symbol": "GOOGL"
+    },
+    {
+      "adjustedAmount": 0.21,
+      "amount": 0.21,
+      "currency": "USD",
+      "date": "2025-06-09",
+      "declarationDate": "2025-04-30",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-06-16",
+      "recordDate": "2025-06-09",
+      "symbol": "GOOGL"
+    },
+    {
+      "adjustedAmount": 0.21,
+      "amount": 0.21,
+      "currency": "USD",
+      "date": "2025-09-08",
+      "declarationDate": "2025-07-24",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-09-15",
+      "recordDate": "2025-09-08",
+      "symbol": "GOOGL"
+    }
+  ]
+}

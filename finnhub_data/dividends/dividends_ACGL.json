@@ -1,0 +1,19 @@
+{
+  "symbol": "ACGL",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:33:11.608013",
+  "data": [
+    {
+      "adjustedAmount": 5,
+      "amount": 5,
+      "currency": "USD",
+      "date": "2024-11-18",
+      "declarationDate": "2024-11-07",
+      "franking": 0,
+      "freq": "4",
+      "payDate": "2024-12-04",
+      "recordDate": "2024-11-18",
+      "symbol": "ACGL"
+    }
+  ]
+}

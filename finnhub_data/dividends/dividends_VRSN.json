@@ -1,0 +1,31 @@
+{
+  "symbol": "VRSN",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:36:19.234519",
+  "data": [
+    {
+      "adjustedAmount": 0.77,
+      "amount": 0.77,
+      "currency": "USD",
+      "date": "2025-05-19",
+      "declarationDate": "2025-04-25",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-05-28",
+      "recordDate": "2025-05-19",
+      "symbol": "VRSN"
+    },
+    {
+      "adjustedAmount": 0.77,
+      "amount": 0.77,
+      "currency": "USD",
+      "date": "2025-08-19",
+      "declarationDate": "2025-07-24",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-08-27",
+      "recordDate": "2025-08-19",
+      "symbol": "VRSN"
+    }
+  ]
+}

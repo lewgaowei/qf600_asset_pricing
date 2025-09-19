@@ -1,0 +1,19 @@
+{
+  "symbol": "PSKY",
+  "data_type": "dividends",
+  "timestamp": "2025-09-19T14:35:36.256040",
+  "data": [
+    {
+      "adjustedAmount": 0.05,
+      "amount": 0.05,
+      "currency": "USD",
+      "date": "2025-09-15",
+      "declarationDate": "2025-09-05",
+      "franking": 0,
+      "freq": "2",
+      "payDate": "2025-10-01",
+      "recordDate": "2025-09-15",
+      "symbol": "PSKY"
+    }
+  ]
+}
