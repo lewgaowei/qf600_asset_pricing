@@ -1,2 +1,3 @@
-# qf600_asset_pricing
-Machine Learning Signals on Asset Pricing
+
+1. create config.py and paste the api token
+
