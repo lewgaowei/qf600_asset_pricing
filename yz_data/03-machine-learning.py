@@ -930,6 +930,7 @@ def run_cross_validation(data, k, config, feature_cols):
                 max_depth=int(params['max_depth']),
                 n_estimators=int(params['n_estimators']),
                 objective='regression',
+                random_state=42,
                 force_col_wise=True,
                 n_jobs=-1,
                 verbose=-1  # Suppress LightGBM output
@@ -1087,6 +1088,7 @@ def run_prediction(data, k, config, feature_cols):
             max_depth=int(best_params['max_depth']),
             n_estimators=int(best_params['n_estimators']),
             objective='regression',
+            random_state=42,
             force_col_wise=True,
             n_jobs=-1,
             verbose=-1
@@ -1153,7 +1155,7 @@ print("=" * 60)
 
 RUN_CV = True  # Change to True when ready to run
 USE_PARALLEL = False  # Set to True for parallel processing (2-3x faster)
-MAX_WORKERS = 4  # Number of parallel processes (2-4 recommended)
+MAX_WORKERS = 3  # Number of parallel processes (2-4 recommended)
 
 if RUN_CV:
     print(f"\n🔄 Starting cross-validation...")
