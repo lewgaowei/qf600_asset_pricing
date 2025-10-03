@@ -48,6 +48,111 @@ data_path = _base_dir / f"signals_with_returns_and_tickers_{START_YEAR}.parquet"
 
 df = pd.read_parquet(data_path, engine="fastparquet")
 
+# Check for duplicate rows in the data
+print("CHECKING FOR DUPLICATE ROWS:")
+print("=" * 50)
+
+# First, show available date columns
+date_columns = [col for col in df.columns if 'date' in col.lower()]
+print(f"Available date columns: {date_columns}")
+
+# Show sample data to understand structure
+print(f"\nSample data structure:")
+sample_cols = ['permno'] + date_columns + (['ticker'] if 'ticker' in df.columns else [])
+print(df[sample_cols].head(10).to_string(index=False))
+
+print(f"\nTotal rows: {len(df):,}")
+print(f"Duplicate rows (all columns): {df.duplicated().sum():,}")
+
+# Check duplicates by permno + form_date
+key_cols = ['permno', 'form_date']
+if all(col in df.columns for col in key_cols):
+    print(f"\nDuplicates by permno + form_date:")
+    duplicates_by_key = df.duplicated(subset=key_cols).sum()
+    print(f"  Duplicate permno-form_date combinations: {duplicates_by_key:,}")
+    
+    if duplicates_by_key > 0:
+        print("\nExample duplicates (permno + form_date):")
+        duplicate_mask = df.duplicated(subset=key_cols, keep=False)
+        sample_duplicates = df[duplicate_mask].head(6)[key_cols + (['ticker'] if 'ticker' in df.columns else [])]
+        print(sample_duplicates.to_string(index=False))
+
+# Check if we need to include datadate as well
+if 'datadate' in df.columns:
+    key_cols_with_datadate = ['permno', 'form_date', 'datadate']
+    print(f"\nDuplicates by permno + form_date + datadate:")
+    duplicates_triple = df.duplicated(subset=key_cols_with_datadate).sum()
+    print(f"  Duplicate permno-form_date-datadate combinations: {duplicates_triple:,}")
+    
+    if duplicates_triple > 0:
+        print("\nExample duplicates (permno + form_date + datadate):")
+        duplicate_mask = df.duplicated(subset=key_cols_with_datadate, keep=False)
+        sample_cols = key_cols_with_datadate + (['ticker'] if 'ticker' in df.columns else [])
+        sample_duplicates = df[duplicate_mask].head(6)[sample_cols]
+        print(sample_duplicates.to_string(index=False))
+
+# Check specific case: Can same stock have same form_date?
+print(f"\nANALYZING FORM_DATE PATTERNS:")
+if 'form_date' in df.columns:
+    # Count unique form_dates
+    unique_form_dates = df['form_date'].nunique()
+    print(f"  Unique form_dates: {unique_form_dates:,}")
+    print(f"  Most common form_dates:")
+    print(df['form_date'].value_counts().head(5))
+    
+    # Check if multiple stocks can have same form_date (this is normal)
+    stocks_per_date = df.groupby('form_date')['permno'].nunique()
+    print(f"  Max stocks per form_date: {stocks_per_date.max():,}")
+    print(f"  Average stocks per form_date: {stocks_per_date.mean():.1f}")
+
+print("=" * 50)
+
+# Remove duplicates intelligently
+if 'datadate' in df.columns and df.duplicated(subset=['permno', 'form_date']).sum() > 0:
+    print(f"\n🔧 HANDLING {df.duplicated(subset=['permno', 'form_date']).sum():,} DUPLICATE PERMNO-FORM_DATE COMBINATIONS...")
+    
+    # Show which stocks have duplicates
+    duplicate_mask = df.duplicated(subset=['permno', 'form_date'], keep=False)
+    duplicate_stocks = df[duplicate_mask][['permno', 'form_date', 'datadate', 'ticker']].copy()
+    duplicate_stocks = duplicate_stocks.sort_values(['permno', 'form_date', 'datadate'])
+    
+    print("\nStocks with duplicate permno-form_date combinations:")
+    unique_duplicate_combos = duplicate_stocks[['permno', 'ticker']].drop_duplicates()
+    for _, row in unique_duplicate_combos.iterrows():
+        permno = row['permno']
+        ticker = row['ticker'] if pd.notna(row['ticker']) else 'N/A'
+        count = len(duplicate_stocks[duplicate_stocks['permno'] == permno])
+        print(f"  PERMNO {permno:.0f} ({ticker}): {count} entries")
+    
+    # Check specifically for PHX
+    phx_duplicates = duplicate_stocks[duplicate_stocks['ticker'] == 'PHX'] if 'ticker' in duplicate_stocks.columns else pd.DataFrame()
+    if len(phx_duplicates) > 0:
+        print(f"\n🔍 PHX (PERMNO 77236) details:")
+        print(phx_duplicates[['permno', 'form_date', 'datadate', 'ticker']].to_string(index=False))
+    else:
+        print(f"\n✅ PHX is NOT in the 54 duplicates (PHX duplicates must be elsewhere)")
+    
+    print("\nStrategy: Keep the most recent datadate for each permno-form_date combination")
+    
+    # Before deduplication
+    before_count = len(df)
+    
+    # Sort by datadate (most recent first) and keep first occurrence of each permno-form_date
+    df = df.sort_values(['permno', 'form_date', 'datadate'], ascending=[True, True, False])
+    df = df.drop_duplicates(subset=['permno', 'form_date'], keep='first')
+    
+    # After deduplication
+    after_count = len(df)
+    print(f"\nRemoved {before_count - after_count:,} duplicate rows")
+    print(f"Final dataset: {after_count:,} rows")
+    
+elif df.duplicated().sum() > 0:
+    print(f"\n🔧 REMOVING {df.duplicated().sum():,} EXACT DUPLICATE ROWS...")
+    df = df.drop_duplicates()
+    print(f"After deduplication: {len(df):,} rows")
+
+print("=" * 50)
+
 for c in ("datadate", "form_date"):
     if c in df.columns:
         df[c] = pd.to_datetime(df[c], errors="coerce")
@@ -652,7 +757,9 @@ if False:  # Skip Excel output section, set to TRUE to get Summary in Excel
     print("=" * 60)
 
 
+
 # %%
+
 # ------------------------------
 # 5. Filter signal columns by missing data threshold
 # ------------------------------
@@ -940,8 +1047,8 @@ X_test = test_clean[final_features].copy()
 y_test = test_clean['expected_return'].copy()
 
 # Keep metadata for later analysis
-train_meta = train_clean[['permno', 'form_year', 'form_date', 'crsp_mktcap_6']].copy()
-test_meta = test_clean[['permno', 'form_year', 'form_date', 'crsp_mktcap_6']].copy()
+train_meta = train_clean[['permno', 'form_year', 'form_date', 'crsp_mktcap_6', 'ticker']].copy()
+test_meta = test_clean[['permno', 'form_year', 'form_date', 'crsp_mktcap_6', 'ticker']].copy()
 
 print(f"Training set: {X_train.shape}")
 print(f"Test set: {X_test.shape}")
@@ -978,6 +1085,8 @@ X_test_reduced = X_test[top_100_features].copy()
 print(f"Reduced features: {len(top_100_features)}")
 
 
+
+# %%
 import xgboost as xgb
 import time
 from sklearn.model_selection import train_test_split
@@ -1005,6 +1114,7 @@ xgb_regularized.fit(X_train_reduced, y_train)
 train_time = time.time() - start_time
 
 print(f"Training completed in {train_time:.1f} seconds")
+
 
 # %%
 # 9c. Make predictions with regularized model
@@ -1060,6 +1170,7 @@ print("10a. Preparing portfolio data...")
 # Create portfolio dataset using test period only (2008-2010)
 portfolio_data = pd.DataFrame({
     'permno': test_meta['permno'].values,
+    'ticker': test_meta['ticker'].values,
     'form_year': test_meta['form_year'].values,
     'form_date': test_meta['form_date'].values,
     'mktcap': test_meta['crsp_mktcap_6'].values,
@@ -1070,6 +1181,8 @@ portfolio_data = pd.DataFrame({
 print(f"Portfolio data shape: {portfolio_data.shape}")
 print(f"Test period: {portfolio_data['form_year'].min()}-{portfolio_data['form_year'].max()}")
 print(f"Average stocks per year: {len(portfolio_data) / portfolio_data['form_year'].nunique():.0f}")
+
+
 
 # %%
 # 10b. Create long-short portfolios (Top 100 Long, Bottom 100 Short)
@@ -1095,7 +1208,20 @@ for year in sorted(portfolio_data['form_year'].unique()):
     
     long_portfolio = year_data.head(TOP_N_STOCKS).copy()
     short_portfolio = year_data.tail(BOTTOM_N_STOCKS).copy()
-    
+
+# print("Number of unique tickers in long portfolio:", len(long_portfolio['ticker'].unique()))
+# duplicate_tickers = long_portfolio[long_portfolio['ticker'].duplicated(keep=False)]
+# print("Number of duplicate tickers in long portfolio:", duplicate_tickers['ticker'].nunique())
+# if not duplicate_tickers.empty:
+#     print("Duplicate tickers in long portfolio:")
+#     print(duplicate_tickers[['ticker', 'permno', 'form_year', 'form_date']].sort_values('ticker').to_string(index=False))
+# print("Number of unique tickers in long portfolio:", len(short_portfolio['ticker'].unique()))
+# print("Short portfolio head:")
+# print(short_portfolio.head())
+
+
+
+
     # Calculate portfolio returns
     long_stats = {
         'portfolio_type': 'long',
@@ -1109,7 +1235,7 @@ for year in sorted(portfolio_data['form_year'].unique()):
     
     short_stats = {
         'portfolio_type': 'short',
-        'actual_return_mean': short_portfolio['actual_return'].mean(),
+        'actual_return_mean': -short_portfolio['actual_return'].mean(),
         'actual_return_std': short_portfolio['actual_return'].std(),
         'n_stocks': len(short_portfolio),
         'total_mktcap': short_portfolio['mktcap'].sum(),
@@ -1191,13 +1317,17 @@ correlation_check = portfolio_df.groupby('portfolio_type')['actual_return_mean']
 long_better_than_short = correlation_check['long'] > correlation_check['short']
 
 print(f"Long outperforms Short: {'✅ Yes' if long_better_than_short else '❌ No'}")
-print(f"Long portfolio performance: {correlation_check['long']*100:+.2f}%")
-print(f"Short portfolio performance: {correlation_check['short']*100:+.2f}%")
+print(f"Long portfolio performance (annual avg): {correlation_check['long']*100:+.2f}%")
+print(f"Short portfolio performance (annual avg): {correlation_check['short']*100:+.2f}%")
+print(f"Long-Short spread (annual avg): {(correlation_check['long'] - correlation_check['short'])*100:+.2f}%")
 
 print("=" * 60)
 print("PORTFOLIO CONSTRUCTION COMPLETE!")
 print("=" * 60)
 
+# %%
+print(test_clean.columns)
+# %%
 # %%
 # ------------------------------
 # 11. Show Actual Stocks - Long and Short Positions by Year
@@ -1205,19 +1335,8 @@ print("=" * 60)
 print("STEP 11: ACTUAL STOCKS IN LONG/SHORT POSITIONS")
 print("=" * 60)
 
-# Get ticker information for the test period stocks
-test_stocks_with_tickers = test_clean[['permno', 'form_year']].merge(
-    df[['permno', 'ticker']].drop_duplicates(), 
-    on='permno', 
-    how='left'
-)
-
-# Merge with portfolio data to get predictions and actual returns
-detailed_portfolio = portfolio_data.merge(
-    test_stocks_with_tickers[['permno', 'ticker']], 
-    on='permno', 
-    how='left'
-)
+# Use portfolio_data directly - it already has tickers!
+detailed_portfolio = portfolio_data.copy()
 
 print(f"Portfolio data with tickers: {detailed_portfolio.shape}")
 print(f"Stocks with ticker info: {detailed_portfolio['ticker'].notna().sum()}/{len(detailed_portfolio)}")
@@ -1226,7 +1345,8 @@ print(f"Stocks with ticker info: {detailed_portfolio['ticker'].notna().sum()}/{l
 for year in sorted(detailed_portfolio['form_year'].unique()):
     year_data = detailed_portfolio[detailed_portfolio['form_year'] == year].copy()
     
-    if len(year_data) < 100:  # Skip years with too few stocks
+    if len(year_data) < 200:  # Need at least 200 stocks for 100 long + 100 short
+        print(f"  Skipping {year}: only {len(year_data)} stocks")
         continue
     
     print(f"\n" + "="*50)
@@ -1279,7 +1399,7 @@ for year in sorted(detailed_portfolio['form_year'].unique()):
     
     # Calculate portfolio performance for this year
     long_avg_return = long_positions['actual_return'].mean()
-    short_avg_return = short_positions['actual_return'].mean()
+    short_avg_return = -short_positions['actual_return'].mean()
     spread = long_avg_return - short_avg_return
     
     print(f"\n📊 YEAR {year} PERFORMANCE:")
@@ -1290,18 +1410,18 @@ for year in sorted(detailed_portfolio['form_year'].unique()):
     # Best and worst performers
     best_long = long_positions.loc[long_positions['actual_return'].idxmax()]
     worst_long = long_positions.loc[long_positions['actual_return'].idxmin()]
-    best_short = short_positions.loc[short_positions['actual_return'].idxmax()]
-    worst_short = short_positions.loc[short_positions['actual_return'].idxmin()]
+    best_short = short_positions.loc[short_positions['actual_return'].idxmin()]
+    worst_short = short_positions.loc[short_positions['actual_return'].idxmax()]
     
     print(f"\n🏆 BEST/WORST PERFORMERS:")
     print(f"  Best long:  {best_long['ticker'] if pd.notna(best_long['ticker']) else 'N/A'} "
-          f"(PERMNO {best_long['permno']:.0f}) - {best_long['actual_return']:+.4f}")
+          f"(PERMNO {best_long['permno']:.0f}) - stock return: {best_long['actual_return']:+.4f}")
     print(f"  Worst long: {worst_long['ticker'] if pd.notna(worst_long['ticker']) else 'N/A'} "
-          f"(PERMNO {worst_long['permno']:.0f}) - {worst_long['actual_return']:+.4f}")
+          f"(PERMNO {worst_long['permno']:.0f}) - stock return: {worst_long['actual_return']:+.4f}")
     print(f"  Best short: {best_short['ticker'] if pd.notna(best_short['ticker']) else 'N/A'} "
-          f"(PERMNO {best_short['permno']:.0f}) - {best_short['actual_return']:+.4f}")
+          f"(PERMNO {best_short['permno']:.0f}) - stock return: {best_short['actual_return']:+.4f} → your P&L: {-best_short['actual_return']:+.4f}")
     print(f"  Worst short: {worst_short['ticker'] if pd.notna(worst_short['ticker']) else 'N/A'} "
-          f"(PERMNO {worst_short['permno']:.0f}) - {worst_short['actual_return']:+.4f}")
+          f"(PERMNO {worst_short['permno']:.0f}) - stock return: {worst_short['actual_return']:+.4f} → your P&L: {-worst_short['actual_return']:+.4f}")
 
 # Summary across all years
 print(f"\n" + "="*60)
@@ -1314,15 +1434,17 @@ all_short_stocks = []
 
 for year in sorted(detailed_portfolio['form_year'].unique()):
     year_data = detailed_portfolio[detailed_portfolio['form_year'] == year].copy()
-    if len(year_data) < 100:
+    if len(year_data) < 200:
         continue
     
     year_data = year_data.sort_values('predicted_return', ascending=False)
-    year_data['decile'] = pd.qcut(year_data['predicted_return'], 
-                                  q=10, labels=False, duplicates='drop') + 1
     
-    long_stocks = year_data[year_data['decile'] == 10][['permno', 'ticker', 'actual_return', 'form_year']]
-    short_stocks = year_data[year_data['decile'] == 1][['permno', 'ticker', 'actual_return', 'form_year']]
+    # Use same logic as main loop - top 100 long, bottom 100 short
+    TOP_N_STOCKS = 100
+    BOTTOM_N_STOCKS = 100
+    
+    long_stocks = year_data.head(TOP_N_STOCKS)[['permno', 'ticker', 'actual_return', 'form_year']]
+    short_stocks = year_data.tail(BOTTOM_N_STOCKS)[['permno', 'ticker', 'actual_return', 'form_year']]
     
     all_long_stocks.append(long_stocks)
     all_short_stocks.append(short_stocks)
@@ -1358,65 +1480,5 @@ for permno, count in short_frequency.head(10).items():
 print("=" * 60)
 print("STOCK-LEVEL ANALYSIS COMPLETE!")
 print("=" * 60)
-
 # %%
-# Calculate performance by year
-yearly_performance = []
-
-for year in sorted(portfolio_df['year'].unique()):
-    year_data = portfolio_df[portfolio_df['year'] == year]
-    
-    if len(year_data) >= 2:  # Ensure we have both long and short
-        # Get portfolio performance for this year
-        portfolio_returns = year_data.set_index('portfolio_type')['actual_return_mean']
-        
-        long_return = portfolio_returns.loc['long']    # Long portfolio
-        short_return = portfolio_returns.loc['short']  # Short portfolio
-        spread = long_return - short_return
-        
-        # Market context
-        market_condition = {
-            2008: "Crisis (-37% S&P)",
-            2009: "Recovery (+26% S&P)", 
-            2010: "Growth (+15% S&P)"
-        }.get(year, "Normal")
-        
-        yearly_performance.append({
-            'year': year,
-            'long_return': long_return,
-            'short_return': short_return,
-            'spread': spread,
-            'market_condition': market_condition,
-            'n_stocks': len(portfolio_data[portfolio_data['form_year'] == year])
-        })
-
-# Display results
-print("Year-by-Year Strategy Performance:")
-print("-" * 60)
-print("Year | Market Context      | Long   | Short  | Spread | Stocks")
-print("-" * 60)
-
-for perf in yearly_performance:
-    print(f"{perf['year']} | {perf['market_condition']:<18} | "
-          f"{perf['long_return']:+.3f} | {perf['short_return']:+.3f} | "
-          f"{perf['spread']:+.3f} | {perf['n_stocks']:,}")
-
-# Summary statistics
-spreads = [p['spread'] for p in yearly_performance]
-print(f"\nStrategy Consistency:")
-print(f"  Best year spread:    {max(spreads):+.4f} ({max(spreads)*100:+.2f}%)")
-print(f"  Worst year spread:   {min(spreads):+.4f} ({min(spreads)*100:+.2f}%)")
-print(f"  Average spread:      {np.mean(spreads):+.4f} ({np.mean(spreads)*100:+.2f}%)")
-print(f"  Spread volatility:   {np.std(spreads):.4f} ({np.std(spreads)*100:.2f}%)")
-print(f"  Positive years:      {sum(1 for s in spreads if s > 0)}/3")
-
-# Performance assessment
-if all(s > 0 for s in spreads):
-    print("  📈 Strategy profitable in ALL years!")
-elif sum(1 for s in spreads if s > 0) >= 2:
-    print("  📊 Strategy profitable in majority of years")
-else:
-    print("  📉 Strategy struggled with consistency")
-
-print("=" * 60)
 
