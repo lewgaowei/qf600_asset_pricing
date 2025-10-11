@@ -1,0 +1,3 @@
+function_set,generations,init_depth,init_method,p_crossover,p_hoist_mutation,p_point_mutation,p_subtree_mutation,parsimony_coefficient,population_size,random_state,stopping_criteria,tournament_size,r2_score,mse,program_length,program_depth
+"('add', 'sub', 'mul', 'div')",20,"(2, 6)",half and half,0.7,0.05,0.1,0.1,0.01,1000,42,0.0,20,-0.2385970748530366,0.2885149740035396,6,0
+"('add', 'sub', 'mul', 'div')",20,"(3, 6)",half and half,0.7,0.05,0.1,0.1,0.01,1000,42,0.0,20,-6.650768504233984,1.7821463661764885,2,0

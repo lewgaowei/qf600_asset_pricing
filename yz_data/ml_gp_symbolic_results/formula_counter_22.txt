@@ -1,0 +1,9 @@
+Evolved Formula for Counter 22
+============================================================
+
+-0.014
+
+Program Stats:
+  Length: 6
+  Depth: 0
+  R² on validation: -0.0000

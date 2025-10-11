@@ -1,0 +1,9 @@
+Evolved Formula for Counter 19
+============================================================
+
+sub(X8, X8)
+
+Program Stats:
+  Length: 11
+  Depth: 1
+  R² on validation: -0.0011

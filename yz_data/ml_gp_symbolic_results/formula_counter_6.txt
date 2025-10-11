@@ -1,0 +1,9 @@
+Evolved Formula for Counter 6
+============================================================
+
+mul(mul(X8, X6), mul(X11, X0))
+
+Program Stats:
+  Length: 30
+  Depth: 2
+  R² on validation: -0.0026

@@ -1,0 +1,9 @@
+Evolved Formula for Counter 15
+============================================================
+
+0.020
+
+Program Stats:
+  Length: 5
+  Depth: 0
+  R² on validation: -0.0504
