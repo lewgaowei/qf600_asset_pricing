@@ -1,0 +1,24 @@
+PySR Evolved Formula for Counter 7
+============================================================
+
+complexity                                        3
+loss                                       0.373767
+equation                          x63 * -0.44864547
+score                                      0.035189
+sympy_format                      x63*(-0.44864547)
+lambda_format    PySRFunction(X=>x63*(-0.44864547))
+Name: 1, dtype: object
+
+Equation Stats:
+  Length: 334
+  Complexity: 3
+  R² on validation: -0.3932
+
+
+Full Equation Hall of Fame:
+============================================================
+   complexity      loss                               equation     score                      sympy_format                                      lambda_format
+0           1  0.401020                            0.116893165  0.000000                 0.116893165000000                 PySRFunction(X=>0.116893165000000)
+1           3  0.373767                      x63 * -0.44864547  0.035189                 x63*(-0.44864547)                 PySRFunction(X=>x63*(-0.44864547))
+2           4  0.373320                 abs(x63 * -0.44864547)  0.001197               0.44864547*Abs(x63)               PySRFunction(X=>0.44864547*Abs(x63))
+3           6  0.372571  abs((x63 * 0.4138411) + -0.026029209)  0.001004  Abs(x63*0.4138411 - 0.026029209)  PySRFunction(X=>Abs(x63*0.4138411 - 0.026029209))

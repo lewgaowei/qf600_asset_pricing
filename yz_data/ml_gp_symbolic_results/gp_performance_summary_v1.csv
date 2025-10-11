@@ -1,0 +1,2 @@
+method,strategy,avg_spread,sharpe_ratio,n_years
+GP_Symbolic_V1,Top_100_Long_Bottom_100_Short,0.1288013176360425,0.2558176590027028,19

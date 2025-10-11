@@ -1,0 +1,2 @@
+batch_size,batching,binary_operators,maxsize,multithreading,ncycles_per_iteration,niterations,optimizer_algorithm,optimizer_nrestarts,parsimony,population_size,populations,procs,random_state,tournament_selection_n,tournament_selection_p,turbo,unary_operators,r2_score,mse,program_length,program_depth
+50,True,"['+', '-', '*', '/']",20,True,550,20,BFGS,2,0.01,50,20,0,42,10,0.86,True,['abs'],-0.5416376035294097,0.2712715670705763,394,4
