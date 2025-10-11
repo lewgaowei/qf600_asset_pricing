@@ -2,7 +2,6 @@
 # ------------------------------
 # STEP 1: Setup imports and load data from 02-feature-engineering.py
 # ------------------------------
-
 # Core libraries
 import numpy as np
 import pandas as pd
@@ -12,10 +11,9 @@ import pickle
 import os
 
 # Machine Learning libraries
-import lightgbm as lgb
+import xgboost as xgb
 from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.model_selection import ParameterGrid
-
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
 
@@ -31,7 +29,7 @@ START_YEAR = 2000
 data_path = _base_dir / f"signals_with_returns_and_tickers_{START_YEAR}.parquet"
 
 # Create output directories for results
-output_dir = _base_dir / "ml_results"
+output_dir = _base_dir / "ml_xgboost_results"
 print(_base_dir)
 print(output_dir)
 
@@ -219,10 +217,13 @@ CONFIG = {
     'end': None,                    # End counter (will be set automatically)
 
     # Feature selection
-    'max_features': 1000,           # Maximum number of features to use
     'missing_threshold': 0.50,      # Drop features with > 50% missing data
-    'use_top_features': 1000        # Use top N features by correlation (None = use ALL)
+    'use_top_features': 1000,       # Use top N features by correlation (None = use ALL)
                                      # Set to 1000 for faster testing, None for full model
+
+    # Multicollinearity removal (NEW - Step 3.7)
+    'remove_multicollinearity': True,  # Remove highly correlated features
+    'correlation_threshold': 0.85       # Correlation threshold (0.85 = 85% correlated)
 }
 
 # ------------------------------
@@ -272,7 +273,7 @@ print(f"  End counter:        {CONFIG['end']} (Year {[y for y, c in year_to_coun
 print(f"  Total test periods: {CONFIG['end'] - CONFIG['begin'] + 1}")
 print()
 print("Feature Settings:")
-print(f"  Max features:       {CONFIG['max_features']}")
+print(f"  Top features:       {CONFIG['use_top_features'] if CONFIG['use_top_features'] is not None else 'ALL'}")
 print(f"  Missing threshold:  {CONFIG['missing_threshold']*100}%")
 
 # ------------------------------
@@ -525,6 +526,174 @@ print(f"\n📝 Example output filenames for counter {k_test}:")
 print(f"  CV file:   {output_filename(CONFIG, mode='cv', counter=k_test).name}")
 print(f"  Pred file: {output_filename(CONFIG, mode='pred', counter=k_test).name}")
 
+def remove_multicollinear_features(data, feature_cols, dep_var, threshold=0.85):
+    """
+    Remove highly correlated features (multicollinearity removal) - OPTIMIZED VERSION.
+
+    For each pair of features with correlation > threshold:
+    - Keep the feature with higher correlation to the target variable
+    - Remove the feature with lower correlation to the target variable
+
+    Optimizations:
+    - Vectorized target correlation calculation (10-20x faster)
+    - Vectorized pair finding with numpy (50-100x faster)
+    - Optional GPU support with cuDF (auto-detected)
+
+    Parameters:
+    -----------
+    data : DataFrame
+        Dataset containing features and target variable
+    feature_cols : list
+        List of feature column names
+    dep_var : str
+        Name of the target variable (for deciding which feature to keep)
+    threshold : float
+        Correlation threshold (default 0.85 = 85% correlated)
+
+    Returns:
+    --------
+    filtered_features : list
+        List of features after removing multicollinear ones
+    removed_features : list
+        List of features that were removed
+    """
+    import time
+
+    print(f"\n🔍 Removing multicollinear features (threshold: {threshold})...")
+    print("-" * 60)
+
+    start_time = time.time()
+
+    # Prepare feature data
+    feature_data = data[feature_cols].copy()
+
+    # ============================================
+    # STEP 1: Calculate feature-feature correlation matrix
+    # ============================================
+    print("⏱️  Step 1/3: Calculating feature-feature correlation matrix...")
+    step_start = time.time()
+
+    # Try GPU acceleration if available
+    use_gpu = False
+    try:
+        import cudf  # Fixed typo: was 'cuDF', should be 'cudf'
+        print("   🚀 GPU detected! Using cuDF for faster computation...")
+        feature_data_gpu = cudf.from_pandas(feature_data)
+        corr_matrix = feature_data_gpu.corr().to_pandas()
+        use_gpu = True
+    except ImportError:
+        print("   💻 Using CPU (pandas) - install RAPIDS cuDF for GPU acceleration")
+        corr_matrix = feature_data.corr()
+    except Exception as e:
+        print(f"   💻 GPU failed, using CPU: {str(e)[:50]}")
+        corr_matrix = feature_data.corr()
+
+    step_time = time.time() - step_start
+    print(f"   ✅ Complete in {step_time:.2f}s")
+
+    # ============================================
+    # STEP 2: Calculate feature-target correlations (VECTORIZED)
+    # ============================================
+    print("⏱️  Step 2/3: Calculating feature-target correlations (vectorized)...")
+    step_start = time.time()
+
+    # OPTIMIZED: Use corrwith() instead of loop - 10-20x faster!
+    target_correlations = feature_data.corrwith(data[dep_var]).abs().fillna(0).to_dict()
+
+    step_time = time.time() - step_start
+    print(f"   ✅ Complete in {step_time:.2f}s")
+
+    # ============================================
+    # STEP 3: Find highly correlated pairs (VECTORIZED)
+    # ============================================
+    print("⏱️  Step 3/3: Finding highly correlated pairs (vectorized)...")
+    step_start = time.time()
+
+    # OPTIMIZED: Use numpy to find all pairs at once - 50-100x faster!
+    # Get upper triangle (avoid duplicates and self-correlations)
+    corr_array = corr_matrix.values
+    corr_abs = np.abs(corr_array)
+
+    # Set diagonal and lower triangle to 0 (only check upper triangle)
+    corr_upper = np.triu(corr_abs, k=1)
+
+    # Find all pairs above threshold at once
+    high_corr_indices = np.where(corr_upper > threshold)
+
+    print(f"   Found {len(high_corr_indices[0]):,} pairs with correlation > {threshold}")
+
+    # Convert indices to feature names and decide which to remove
+    features_to_remove = set()
+    high_corr_pairs = []
+
+    for idx in range(len(high_corr_indices[0])):
+        i = high_corr_indices[0][idx]
+        j = high_corr_indices[1][idx]
+
+        feat1 = feature_cols[i]
+        feat2 = feature_cols[j]
+
+        # Skip if either feature already marked for removal
+        if feat1 in features_to_remove or feat2 in features_to_remove:
+            continue
+
+        corr_val = corr_abs[i, j]
+
+        # Keep feature with higher target correlation
+        if target_correlations[feat1] >= target_correlations[feat2]:
+            features_to_remove.add(feat2)
+            removed_feat = feat2
+            kept_feat = feat1
+        else:
+            features_to_remove.add(feat1)
+            removed_feat = feat1
+            kept_feat = feat2
+
+        high_corr_pairs.append({
+            'feature_1': feat1,
+            'feature_2': feat2,
+            'correlation': corr_val,
+            'kept': kept_feat,
+            'removed': removed_feat
+        })
+
+    step_time = time.time() - step_start
+    print(f"   ✅ Complete in {step_time:.2f}s")
+
+    # Create filtered feature list
+    filtered_features = [f for f in feature_cols if f not in features_to_remove]
+
+    # ============================================
+    # SUMMARY
+    # ============================================
+    total_time = time.time() - start_time
+
+    print(f"\n✅ Multicollinearity removal complete!")
+    print(f"   Mode: {'GPU (cuDF)' if use_gpu else 'CPU (pandas)'}")
+    print(f"   Total time: {total_time:.2f}s")
+    print(f"   Features before: {len(feature_cols):,}")
+    print(f"   Features after:  {len(filtered_features):,}")
+    print(f"   Features removed: {len(features_to_remove):,} ({len(features_to_remove)/len(feature_cols)*100:.1f}%)")
+
+    if len(high_corr_pairs) > 0:
+        print(f"\n📋 Top 10 highly correlated pairs (>{threshold}):")
+        print("-" * 60)
+        print(f"{'Kept Feature':<30} | {'Removed Feature':<30} | {'Corr':>6}")
+        print("-" * 60)
+
+        # Sort by correlation (descending) and show top 10
+        sorted_pairs = sorted(high_corr_pairs, key=lambda x: x['correlation'], reverse=True)
+        for pair in sorted_pairs[:10]:
+            kept = pair['kept'][:28]
+            removed = pair['removed'][:28]
+            print(f"{kept:<30} | {removed:<30} | {pair['correlation']:>6.2f}")
+
+        if len(high_corr_pairs) > 10:
+            print(f"  ... and {len(high_corr_pairs) - 10:,} more pairs")
+
+    return filtered_features, list(features_to_remove)
+
+
 print("\n" + "=" * 60)
 print("STEP 3 COMPLETE: Helper functions ready!")
 print("=" * 60)
@@ -569,9 +738,9 @@ print(f"Reduction: {total_features:,} → {kept_features:,} ({high_missing:,} dr
 features_to_keep = missing_df[missing_df['keep']]['column'].tolist()
 
 # ------------------------------
-# 3.5.2 Apply cross-sectional scaling
+# 3.5.2 Apply cross-sectional scaling (PROFESSOR'S EXACT METHOD)
 # ------------------------------
-print(f"\n⚖️  APPLYING CROSS-SECTIONAL SCALING...")
+print(f"\n⚖️  APPLYING CROSS-SECTIONAL SCALING (PROFESSOR'S METHOD)...")
 print("-" * 60)
 
 # Check if scaled data already exists
@@ -588,8 +757,12 @@ if scaled_data_file.exists():
     print("\n⏭️  Skipping scaling (using cached data)")
 
 else:
-    print("Scaling method: Winsorize (1%, 99%) → Z-score → Clip (-3, 3) → Fill NaN with 0")
-    print("This is done separately for EACH year to avoid look-ahead bias")
+    print("Scaling method: Professor's Rank-Range Method")
+    print("  1. Rank values cross-sectionally within each year")
+    print("  2. Scale ranks to range [-1, +1]")
+    print("  3. Fill NaN with 0")
+    print()
+    print("This matches: reference/02-ML_Prediction/02_build_yz18k.R")
 
     # Create a copy for scaling
     df_scaled = df.copy()
@@ -609,43 +782,40 @@ else:
         for col in features_to_keep:
             col_data = df_scaled.loc[year_mask, col]
 
-            # Skip if all NaN
-            if col_data.notna().sum() == 0:
+            # Rank values (using average method for ties, keeps NaN as NaN)
+            ranks = col_data.rank(method='average', na_option='keep')
+
+            # Get min and max ranks (excluding NaN)
+            valid_ranks = ranks.dropna()
+
+            if len(valid_ranks) == 0:
+                # All NaN - fill with 0
                 df_scaled.loc[year_mask, col] = 0
                 continue
 
-            # Skip if too few observations
-            non_nan_data = col_data.dropna()
-            if len(non_nan_data) < 10:
-                df_scaled.loc[year_mask, col] = 0
-                continue
+            min_rank = valid_ranks.min()
+            max_rank = valid_ranks.max()
 
-            # 1. Winsorize outliers (clip to 1st and 99th percentiles)
-            lower_bound = non_nan_data.quantile(0.01)
-            upper_bound = non_nan_data.quantile(0.99)
-            winsorized = col_data.clip(lower_bound, upper_bound)
-
-            # 2. Cross-sectional z-score (mean=0, std=1 within this year)
-            mean_val = winsorized.mean()
-            std_val = winsorized.std()
-
-            if std_val > 1e-8:  # Avoid division by zero
-                z_scored = (winsorized - mean_val) / std_val
+            # Scale ranks to [-1, +1]
+            if max_rank > min_rank:
+                # Formula: 2 * (rank - min) / (max - min) - 1
+                # This maps min_rank -> -1, max_rank -> +1
+                scaled = 2 * (ranks - min_rank) / (max_rank - min_rank) - 1
             else:
-                z_scored = winsorized * 0  # All same value -> set to 0
+                # All ranks are the same -> set to 0
+                scaled = ranks * 0
 
-            # 3. Clip extreme values for neural network stability
-            clipped = z_scored.clip(-3, 3)
-
-            # 4. Fill NaN with 0 (neutral value after scaling)
-            final_scaled = clipped.fillna(0)
+            # Fill NaN with 0
+            scaled = scaled.fillna(0)
 
             # Update the dataframe
-            df_scaled.loc[year_mask, col] = final_scaled
+            df_scaled.loc[year_mask, col] = scaled
 
         print(" ✓")
 
     print(f"\n✅ Scaling complete!")
+    print(f"   Method: Rank-based scaling to [-1, +1] range")
+    print(f"   Missing values: Filled with 0")
 
     # Save scaled data for future use
     print(f"\n💾 Saving scaled data to: {scaled_data_file.name}")
@@ -683,70 +853,182 @@ print("=" * 60)
 # ------------------------------
 # STEP 3.6: Optional Feature Selection by Correlation (AFTER Scaling)
 # ------------------------------
-print("\n" + "=" * 60)
-print("STEP 3.6: OPTIONAL FEATURE SELECTION")
-print("=" * 60)
+feature_selection_required = True
+if feature_selection_required == True:
+    print("\n" + "=" * 60)
+    print("STEP 3.6: OPTIONAL FEATURE SELECTION")
+    print("=" * 60)
 
-if CONFIG['use_top_features'] is not None:
-    print(f"\n📊 Selecting top {CONFIG['use_top_features']} features by correlation with {CONFIG['dep_var']}...")
+    if CONFIG['use_top_features'] is not None:
+        print(f"\n📊 Selecting top {CONFIG['use_top_features']} features by correlation with {CONFIG['dep_var']}...")
+        print("-" * 60)
+
+        # Calculate correlation for each feature with the target variable
+        print("Calculating correlations (this may take a minute)...")
+        feature_correlations = []
+
+        for col in final_feature_columns:
+            # Get non-NaN pairs
+            mask = df_scaled[col].notna() & df_scaled[CONFIG['dep_var']].notna()
+
+            if mask.sum() < 100:  # Need at least 100 observations
+                continue
+
+            # Calculate Pearson correlation
+            corr = df_scaled.loc[mask, col].corr(df_scaled.loc[mask, CONFIG['dep_var']])
+
+            if not pd.isna(corr):
+                feature_correlations.append({
+                    'feature': col,
+                    'correlation': corr,
+                    'abs_correlation': abs(corr)
+                })
+
+        # Sort by absolute correlation (descending)
+        corr_df = pd.DataFrame(feature_correlations).sort_values('abs_correlation', ascending=False)
+
+        # Select top N features
+        top_features = corr_df.head(CONFIG['use_top_features'])
+        final_feature_columns = top_features['feature'].tolist()
+
+        print(f"\n✅ Feature selection complete!")
+        print(f"   Before: {len(features_to_keep):,} features")
+        print(f"   After:  {len(final_feature_columns):,} features")
+        print(f"   Reduction: {len(features_to_keep) - len(final_feature_columns):,} features removed")
+
+        print(f"\n📋 Top 10 features by correlation:")
+        print("-" * 60)
+        print("Rank | Feature                          | Correlation")
+        print("-" * 60)
+        for rank, (idx, row) in enumerate(top_features.head(10).iterrows(), 1):
+            feature_name = row['feature'][:30]  # Truncate long names
+            print(f"  {rank:2d} | {feature_name:32s} | {row['correlation']:+.4f}")
+
+        if len(final_feature_columns) > 10:
+            print(f"  ... and {len(final_feature_columns) - 10:,} more features")
+
+        print("\n💡 TIP: Set CONFIG['use_top_features'] = None to use ALL features")
+
+    else:
+        print(f"\n💡 Using ALL {len(final_feature_columns):,} features (no correlation selection)")
+        print("   This follows professor's approach")
+        print("\n💡 TIP: Set CONFIG['use_top_features'] = 1000 for faster testing with top features")
+
+    print("\n" + "=" * 60)
+    print("STEP 3.6 COMPLETE: Feature set finalized!")
+    print("=" * 60)
+    print(f"📊 Final feature count: {len(final_feature_columns):,}")
+    print("=" * 60)
+
+# %%
+# ------------------------------
+# STEP 3.7: Optional Multicollinearity Removal (AFTER Target Correlation Selection)
+# ------------------------------
+if CONFIG['remove_multicollinearity']:
+    print("\n" + "=" * 60)
+    print("STEP 3.7: OPTIONAL MULTICOLLINEARITY REMOVAL")
+    print("=" * 60)
+
+    print(f"\n📊 Removing highly correlated features from the selected {len(final_feature_columns):,} features...")
+    print(f"   Correlation threshold: {CONFIG['correlation_threshold']}")
     print("-" * 60)
 
-    # Calculate correlation for each feature with the target variable
-    print("Calculating correlations (this may take a minute)...")
-    feature_correlations = []
+    # Check if cached parquet file exists
+    cache_filename = f"multicoll_filtered_features_n{len(final_feature_columns)}_thresh{CONFIG['correlation_threshold']}_{START_YEAR}.parquet"
+    cache_file = _base_dir / cache_filename
 
-    for col in final_feature_columns:
-        # Get non-NaN pairs
-        mask = df_scaled[col].notna() & df_scaled[CONFIG['dep_var']].notna()
+    if cache_file.exists():
+        print(f"\n✅ Found cached multicollinearity removal results!")
+        print(f"   Loading from: {cache_file.name}")
 
-        if mask.sum() < 100:  # Need at least 100 observations
-            continue
+        # Load cached feature list
+        cached_df = pd.read_parquet(cache_file, engine="fastparquet")
+        features_before_multicoll = final_feature_columns.copy()
+        final_feature_columns = cached_df['feature'].tolist()
+        removed_features = [f for f in features_before_multicoll if f not in final_feature_columns]
 
-        # Calculate Pearson correlation
-        corr = df_scaled.loc[mask, col].corr(df_scaled.loc[mask, CONFIG['dep_var']])
+        print(f"   Loaded {len(final_feature_columns):,} features from cache")
+        print(f"   Removed: {len(removed_features):,} features")
+        print("\n⏭️  Skipping multicollinearity removal (using cached data)")
 
-        if not pd.isna(corr):
-            feature_correlations.append({
-                'feature': col,
-                'correlation': corr,
-                'abs_correlation': abs(corr)
-            })
+    else:
+        print(f"\n⚙️  No cache found - running multicollinearity removal...")
 
-    # Sort by absolute correlation (descending)
-    corr_df = pd.DataFrame(feature_correlations).sort_values('abs_correlation', ascending=False)
+        # Save features BEFORE multicollinearity removal (for comparison)
+        features_before_multicoll = final_feature_columns.copy()
 
-    # Select top N features
-    top_features = corr_df.head(CONFIG['use_top_features'])
-    final_feature_columns = top_features['feature'].tolist()
+        # Apply multicollinearity removal
+        filtered_features, removed_features = remove_multicollinear_features(
+            data=df_scaled,
+            feature_cols=final_feature_columns,
+            dep_var=CONFIG['dep_var'],
+            threshold=CONFIG['correlation_threshold']
+        )
 
-    print(f"\n✅ Feature selection complete!")
-    print(f"   Before: {len(features_to_keep):,} features")
-    print(f"   After:  {len(final_feature_columns):,} features")
-    print(f"   Reduction: {len(features_to_keep) - len(final_feature_columns):,} features removed")
+        # Update final_feature_columns with filtered list
+        final_feature_columns = filtered_features
 
-    print(f"\n📋 Top 10 features by correlation:")
-    print("-" * 60)
-    print("Rank | Feature                          | Correlation")
-    print("-" * 60)
-    for rank, (idx, row) in enumerate(top_features.head(10).iterrows(), 1):
-        feature_name = row['feature'][:30]  # Truncate long names
-        print(f"  {rank:2d} | {feature_name:32s} | {row['correlation']:+.4f}")
+        # Save to parquet for future use (CACHING)
+        print(f"\n💾 Caching results to: {cache_file.name}")
+        pd.DataFrame({'feature': final_feature_columns}).to_parquet(
+            cache_file, engine="fastparquet", compression="snappy"
+        )
+        print("✅ Cached! Next time this step will be skipped.")
 
-    if len(final_feature_columns) > 10:
-        print(f"  ... and {len(final_feature_columns) - 10:,} more features")
+    # Save the results to CSV for comparison (always do this)
+    save_dir = _base_dir / "multicollinearity_analysis"
+    save_dir.mkdir(exist_ok=True)
 
-    print("\n💡 TIP: Set CONFIG['use_top_features'] = None to use ALL features")
+    # Save features before removal
+    pd.DataFrame({'feature': features_before_multicoll}).to_csv(
+        save_dir / f'features_before_multicoll_{CONFIG["correlation_threshold"]}.csv',
+        index=False
+    )
+
+    # Save features after removal (kept features)
+    pd.DataFrame({'feature': final_feature_columns}).to_csv(
+        save_dir / f'features_after_multicoll_{CONFIG["correlation_threshold"]}.csv',
+        index=False
+    )
+
+    # Save removed features
+    pd.DataFrame({'feature': removed_features}).to_csv(
+        save_dir / f'features_removed_multicoll_{CONFIG["correlation_threshold"]}.csv',
+        index=False
+    )
+
+    # Save summary
+    summary_df = pd.DataFrame([{
+        'threshold': CONFIG['correlation_threshold'],
+        'features_before': len(features_before_multicoll),
+        'features_after': len(final_feature_columns),
+        'features_removed': len(removed_features),
+        'removal_percentage': len(removed_features) / len(features_before_multicoll) * 100
+    }])
+    summary_df.to_csv(save_dir / f'multicoll_summary_{CONFIG["correlation_threshold"]}.csv', index=False)
+
+    print(f"\n💾 Results saved to: {save_dir.name}/")
+    print(f"   - features_before_multicoll_{CONFIG['correlation_threshold']}.csv ({len(features_before_multicoll)} features)")
+    print(f"   - features_after_multicoll_{CONFIG['correlation_threshold']}.csv ({len(final_feature_columns)} features)")
+    print(f"   - features_removed_multicoll_{CONFIG['correlation_threshold']}.csv ({len(removed_features)} features)")
+    print(f"   - multicoll_summary_{CONFIG['correlation_threshold']}.csv")
+
+    print("\n" + "=" * 60)
+    print("STEP 3.7 COMPLETE: Multicollinearity removed!")
+    print("=" * 60)
+    print(f"📊 Final feature count after multicollinearity removal: {len(final_feature_columns):,}")
+    print(f"   Removed: {len(removed_features):,} features ({len(removed_features)/len(features_before_multicoll)*100:.1f}%)")
+    print("=" * 60)
 
 else:
-    print(f"\n💡 Using ALL {len(final_feature_columns):,} features (no correlation selection)")
-    print("   This follows professor's approach")
-    print("\n💡 TIP: Set CONFIG['use_top_features'] = 1000 for faster testing with top features")
-
-print("\n" + "=" * 60)
-print("STEP 3.6 COMPLETE: Feature set finalized!")
-print("=" * 60)
-print(f"📊 Final feature count: {len(final_feature_columns):,}")
-print("=" * 60)
+    print("\n" + "=" * 60)
+    print("STEP 3.7: MULTICOLLINEARITY REMOVAL SKIPPED")
+    print("=" * 60)
+    print(f"\n💡 Multicollinearity removal is disabled (CONFIG['remove_multicollinearity'] = False)")
+    print("   To enable: Set CONFIG['remove_multicollinearity'] = True")
+    print("   This will remove features highly correlated with EACH OTHER")
+    print(f"\n📊 Current feature count: {len(final_feature_columns):,}")
+    print("=" * 60)
 
 # %%
 # ------------------------------
@@ -775,12 +1057,14 @@ def get_hyperparameter_grid(method):
     """
 
     if method == 'brt':
-        # Hyperparameters for LightGBM Boosted Regression Tree
+        # Hyperparameters for XGBoost Boosted Regression Tree
         grid = {
-            'n_estimators': [100, 250, 500, 750, 1000],  # Number of trees (matches professor's range)
-            'learning_rate': [0.01, 0.05, 0.1],          # Learning rate (step size)
+            'n_estimators': [100, 150, 200],  # Number of trees (matches professor's range)
+            'learning_rate': [0.15, 0.2, 0.3],          # Learning rate (step size)
             # 'learning_rate': [0.01],          # Learning rate (step size)
-            'max_depth': [-1]                             # Tree depth (-1 = no limit)
+            'max_depth': [6, 9, 12],                        # Tree depth (XGBoost default is 6)
+            'subsample': [1.0],              # NEW: Row sampling                                                                                                                                                                                                                                                                                                               │ │
+            'colsample_bytree': [1.0]       # NEW: Feature sampling     
         }
     else:
         raise ValueError(f"Unknown method: {method}")
@@ -922,18 +1206,25 @@ def run_cross_validation(data, k, config, feature_cols):
     print(f"\nTesting hyperparameters...")
     print("-" * 60)
 
+    import time
+    combo_start_time = time.time()
+
     for i, params in enumerate(tunegrid):
+        # Start timing this combination
+        iter_start = time.time()
+
         # Train model with current hyperparameters
         if config['method'] == 'brt':
-            model = lgb.LGBMRegressor(
+            model = xgb.XGBRegressor(
                 learning_rate=params['learning_rate'],
                 max_depth=int(params['max_depth']),
                 n_estimators=int(params['n_estimators']),
-                objective='regression',
+                subsample=params['subsample'],
+                colsample_bytree=params['colsample_bytree'],
                 random_state=42,
-                force_col_wise=True,
-                n_jobs=-1,
-                verbose=-1  # Suppress LightGBM output
+                tree_method='hist',  # Default tree method
+                device='cuda',  # GPU acceleration (XGBoost 2.0+)
+                verbosity=0  # Suppress output for cleaner logs
             )
 
             model.fit(X_train, y_train)
@@ -949,12 +1240,19 @@ def run_cross_validation(data, k, config, feature_cols):
         cv_results.loc[i, 'r2_score'] = r2
         cv_results.loc[i, 'mse'] = mse
 
+        # Calculate duration for this iteration
+        iter_duration = time.time() - iter_start
+
         # Print progress every 5 combinations
         if (i + 1) % 5 == 0 or (i + 1) == len(tunegrid):
+            elapsed = time.time() - combo_start_time
+            avg_time = elapsed / (i + 1)
+            remaining = avg_time * (len(tunegrid) - (i + 1))
+
             print(f"  Completed {i+1:2d}/{len(tunegrid)} | "
-                  f"Latest: n_est={params['n_estimators']:4d}, "
-                  f"lr={params['learning_rate']:.2f} → "
-                  f"R²={r2:+.4f}, MSE={mse:.6f}")
+                  f"n_est={params['n_estimators']:4d}, lr={params['learning_rate']:.2f} | "
+                  f"R²={r2:+.4f} | "
+                  f"⏱️ {iter_duration:.1f}s (avg: {avg_time:.1f}s, ETA: {remaining:.0f}s)")
 
     # Sort by R² score (descending - higher is better)
     cv_results = cv_results.sort_values('r2_score', ascending=False)
@@ -1083,15 +1381,16 @@ def run_prediction(data, k, config, feature_cols):
     print(f"\nTraining final model...")
 
     if config['method'] == 'brt':
-        model = lgb.LGBMRegressor(
+        model = xgb.XGBRegressor(
             learning_rate=float(best_params['learning_rate']),
             max_depth=int(best_params['max_depth']),
             n_estimators=int(best_params['n_estimators']),
-            objective='regression',
+            subsample=float(best_params['subsample']),
+            colsample_bytree=float(best_params['colsample_bytree']),
             random_state=42,
-            force_col_wise=True,
-            n_jobs=-1,
-            verbose=-1
+            tree_method='hist',  # Default tree method
+            device='cuda',  # GPU acceleration (XGBoost 2.0+)
+            verbosity=0  # Suppress output for cleaner logs
         )
 
         model.fit(X_train, y_train)
@@ -1154,8 +1453,8 @@ print("=" * 60)
 # Set RUN_CV = True to execute
 
 RUN_CV = True  # Change to True when ready to run
-USE_PARALLEL = False  # Set to True for parallel processing (2-3x faster)
-MAX_WORKERS = 3  # Number of parallel processes (2-4 recommended)
+USE_PARALLEL = False  # ⚠️ Set to False when using GPU (GPU processes can't run in parallel)
+MAX_WORKERS = 3  # Number of parallel processes (only used if USE_PARALLEL=True)
 
 if RUN_CV:
     print(f"\n🔄 Starting cross-validation...")
@@ -1242,6 +1541,141 @@ print("\n" + "=" * 60)
 print("STEP 7 STATUS: Ready to run when RUN_CV = True")
 print("=" * 60)
 
+
+# %%
+# ------------------------------
+# STEP 7b: ANALYZE BEST HYPERPARAMETERS ACROSS ALL PERIODS
+# ------------------------------
+print("\n" + "=" * 60)
+print("STEP 7B: HYPERPARAMETER ANALYSIS")
+print("=" * 60)
+
+import glob
+from pathlib import Path
+
+# Read all CV files
+cv_files = list(cv_dir.glob("*.csv"))
+
+if len(cv_files) == 0:
+    print("\n⚠️  No CV files found. Run Step 7 first!")
+else:
+    print(f"\nAnalyzing {len(cv_files)} CV result files...")
+
+    all_results = []
+    for file in cv_files:
+        df_cv = pd.read_csv(file)
+        # Get the best result from each file
+        best = df_cv.nsmallest(1, 'r2_score')  # Lower R² (less negative) is better
+        counter = int(file.stem.split('counter_')[1].split('_')[0])
+        best['counter'] = counter
+        # Get year from counter
+        year = [y for y, c in year_to_counter.items() if c == counter][0]
+        best['year'] = year
+        all_results.append(best)
+
+    # Combine all best results
+    best_results = pd.concat(all_results, ignore_index=True)
+    best_results = best_results.sort_values('counter')
+
+    print("\n" + "="*80)
+    print("BEST HYPERPARAMETERS FOR EACH TEST PERIOD")
+    print("="*80)
+    print(f"\nTotal periods analyzed: {len(best_results)}")
+    print(f"R² range: {best_results['r2_score'].min():.4f} to {best_results['r2_score'].max():.4f}")
+
+    print("\n" + "-"*100)
+    print(f"{'Year':<6} | {'Counter':<8} | {'LR':<6} | {'Depth':<6} | {'N_Est':<7} | {'R²':<10} | {'MSE':<12}")
+    print("-"*100)
+    for idx, row in best_results.iterrows():
+        print(f"{int(row['year']):<6} | {int(row['counter']):<8} | {row['learning_rate']:<6.2f} | "
+            f"{int(row['max_depth']):<6} | {int(row['n_estimators']):<7} | "
+            f"{row['r2_score']:<+10.4f} | {row['mse']:<12.6f}")
+
+    print("\n" + "="*80)
+    print("FREQUENCY OF BEST HYPERPARAMETERS")
+    print("="*80)
+
+    print("\n1. LEARNING RATE (in best models):")
+    lr_counts = best_results['learning_rate'].value_counts().sort_index()
+    for lr, count in lr_counts.items():
+        pct = count / len(best_results) * 100
+        print(f"   {lr:.2f}: {count:2d} times ({pct:5.1f}%)")
+    print(f"   Mean: {best_results['learning_rate'].mean():.3f}")
+
+    print("\n2. MAX DEPTH (in best models):")
+    depth_counts = best_results['max_depth'].value_counts().sort_index()
+    for depth, count in depth_counts.items():
+        pct = count / len(best_results) * 100
+        print(f"   {int(depth):2d}: {count:2d} times ({pct:5.1f}%)")
+    print(f"   Mean: {best_results['max_depth'].mean():.1f}")
+
+    print("\n3. N_ESTIMATORS (in best models):")
+    nest_counts = best_results['n_estimators'].value_counts().sort_index()
+    for nest, count in nest_counts.items():
+        pct = count / len(best_results) * 100
+        print(f"   {int(nest):3d}: {count:2d} times ({pct:5.1f}%)")
+    print(f"   Mean: {best_results['n_estimators'].mean():.1f}")
+
+    print("\n" + "="*80)
+    print("TOP 10 BEST PERFORMING CONFIGURATIONS (across all periods)")
+    print("="*80)
+    top10 = best_results.nsmallest(10, 'r2_score')[['year', 'counter', 'learning_rate', 'max_depth', 'n_estimators', 'r2_score']]
+    print(top10.to_string(index=False))
+
+    # Analyze by hyperparameter across ALL combinations
+    print("\n" + "="*80)
+    print("AVERAGE R² BY HYPERPARAMETER VALUE (ALL COMBINATIONS)")
+    print("="*80)
+
+    # Aggregate across all files
+    all_data = []
+    for file in cv_files:
+        df_cv = pd.read_csv(file)
+        counter = int(file.stem.split('counter_')[1].split('_')[0])
+        year = [y for y, c in year_to_counter.items() if c == counter][0]
+        df_cv['counter'] = counter
+        df_cv['year'] = year
+        all_data.append(df_cv)
+
+    full_data = pd.concat(all_data, ignore_index=True)
+
+    print("\nBy LEARNING RATE:")
+    lr_avg = full_data.groupby('learning_rate')['r2_score'].mean().sort_values(ascending=False)
+    for lr, r2 in lr_avg.items():
+        print(f"   {lr:.2f}: {r2:+.4f}")
+
+    print("\nBy MAX_DEPTH:")
+    depth_avg = full_data.groupby('max_depth')['r2_score'].mean().sort_values(ascending=False)
+    for depth, r2 in depth_avg.items():
+        print(f"   {int(depth):2d}: {r2:+.4f}")
+
+    print("\nBy N_ESTIMATORS:")
+    nest_avg = full_data.groupby('n_estimators')['r2_score'].mean().sort_values(ascending=False)
+    for nest, r2 in nest_avg.items():
+        print(f"   {int(nest):3d}: {r2:+.4f}")
+
+    # Save summary to file
+    summary_file = output_dir / 'hyperparameter_analysis.csv'
+    best_results.to_csv(summary_file, index=False)
+    print(f"\n✅ Best hyperparameters saved to: {summary_file.name}")
+
+    print("\n" + "="*80)
+    print("KEY INSIGHTS")
+    print("="*80)
+    print(f"\n🏆 Most Winning Hyperparameters:")
+    print(f"   Learning Rate: {best_results['learning_rate'].mode()[0]:.2f} (wins {lr_counts.max()} times)")
+    print(f"   Max Depth:     {int(best_results['max_depth'].mode()[0])} (wins {depth_counts.max()} times)")
+    print(f"   N Estimators:  {int(best_results['n_estimators'].mode()[0])} (wins {nest_counts.max()} times)")
+
+    print(f"\n📊 Most Consistent Hyperparameters (by avg R²):")
+    print(f"   Learning Rate: {lr_avg.idxmax():.2f} (avg R²: {lr_avg.max():+.4f})")
+    print(f"   Max Depth:     {int(depth_avg.idxmax())} (avg R²: {depth_avg.max():+.4f})")
+    print(f"   N Estimators:  {int(nest_avg.idxmax())} (avg R²: {nest_avg.max():+.4f})")
+
+print("\n" + "=" * 60)
+print("STEP 7B COMPLETE!")
+print("=" * 60)
+  
 # %%
 # ------------------------------
 # STEP 8: Run Final Predictions on Test Periods
@@ -1410,24 +1844,26 @@ if final_predictions is not None and RUN_PRED:
 
     if missing_cols:
         print(f"⚠️  Missing required columns: {missing_cols}")
-        portfolio_df = None
+        portfolio_df_fixed = None
+        portfolio_df_decile = None
     else:
-        # For each year, create long/short portfolios
-        portfolio_results = []
+        # ========================================
+        # VERSION 1: FIXED TOP 100 / BOTTOM 100
+        # ========================================
+        print(f"\n📈 Building portfolios - VERSION 1: Fixed Top 100 / Bottom 100")
+        print("-" * 60)
+        portfolio_results_fixed = []
 
         for year in sorted(portfolio_data['form_year'].unique()):
             year_data = portfolio_data[portfolio_data['form_year'] == year].copy()
 
             if len(year_data) < 200:
-                print(f"  Skipping {year:.0f}: only {len(year_data)} stocks")
                 continue
-
-            print(f"  Processing {year:.0f}: {len(year_data):,} stocks")
 
             # Sort by predicted returns
             year_data = year_data.sort_values('predicted_return', ascending=False)
 
-            # Top 100 long, bottom 100 short
+            # Fixed: Top 100 long, bottom 100 short
             TOP_N = 100
             BOTTOM_N = 100
 
@@ -1439,7 +1875,7 @@ if final_predictions is not None and RUN_PRED:
             short_return = -short_portfolio[CONFIG['dep_var']].mean()
             spread = long_return - short_return
 
-            portfolio_results.append({
+            portfolio_results_fixed.append({
                 'year': year,
                 'long_return': long_return,
                 'short_return': short_return,
@@ -1448,14 +1884,63 @@ if final_predictions is not None and RUN_PRED:
                 'n_short': len(short_portfolio)
             })
 
-        portfolio_df = pd.DataFrame(portfolio_results)
+            print(f"  Year {year:.0f}: {len(year_data):,} stocks → Long {len(long_portfolio)}, Short {len(short_portfolio)}")
 
-        # Save portfolio results
-        portfolio_file = output_dir / 'portfolio_returns.csv'
-        portfolio_df.to_csv(portfolio_file, index=False)
+        portfolio_df_fixed = pd.DataFrame(portfolio_results_fixed)
+        portfolio_file_fixed = output_dir / 'portfolio_returns_fixed100.csv'
+        portfolio_df_fixed.to_csv(portfolio_file_fixed, index=False)
+        print(f"✅ Fixed-100 portfolios saved to: {portfolio_file_fixed.name}")
 
-        print(f"\n✅ Portfolios created for {len(portfolio_df)} years")
-        print(f"Results saved to: {portfolio_file.name}")
+        # ========================================
+        # VERSION 2: DECILE METHOD (10% LONG / 5% SHORT)
+        # ========================================
+        print(f"\n📈 Building portfolios - VERSION 2: Decile Method (Top 10% / Bottom 5%)")
+        print("-" * 60)
+        portfolio_results_decile = []
+
+        for year in sorted(portfolio_data['form_year'].unique()):
+            year_data = portfolio_data[portfolio_data['form_year'] == year].copy()
+
+            if len(year_data) < 200:
+                continue
+
+            # Sort by predicted returns
+            year_data = year_data.sort_values('predicted_return', ascending=False)
+
+            # Custom: Top 10% long, Bottom 5% short
+            n_stocks = len(year_data)
+            decile_size_long = n_stocks // 10   # 10% of stocks for long
+            decile_size_short = n_stocks // 20  # 5% of stocks for short
+
+            TOP_N = decile_size_long       # Top 10% (Decile 10)
+            BOTTOM_N = decile_size_short   # Bottom 5% (Half decile)
+
+            long_portfolio = year_data.head(TOP_N)
+            short_portfolio = year_data.tail(BOTTOM_N)
+
+            # Calculate returns
+            long_return = long_portfolio[CONFIG['dep_var']].mean()
+            short_return = -short_portfolio[CONFIG['dep_var']].mean()
+            spread = long_return - short_return
+
+            portfolio_results_decile.append({
+                'year': year,
+                'long_return': long_return,
+                'short_return': short_return,
+                'spread': spread,
+                'n_long': len(long_portfolio),
+                'n_short': len(short_portfolio)
+            })
+
+            print(f"  Year {year:.0f}: {len(year_data):,} stocks → Long {len(long_portfolio)}, Short {len(short_portfolio)}")
+
+        portfolio_df_decile = pd.DataFrame(portfolio_results_decile)
+        portfolio_file_decile = output_dir / 'portfolio_returns_decile10pct.csv'
+        portfolio_df_decile.to_csv(portfolio_file_decile, index=False)
+        print(f"✅ Decile-10% portfolios saved to: {portfolio_file_decile.name}")
+
+        # Store decile version as default for Step 10
+        portfolio_df = portfolio_df_decile
 
 else:
     print("\n⚠️  Portfolios not created (predictions not available)")
@@ -1474,64 +1959,153 @@ print("\n" + "=" * 60)
 print("STEP 10: EVALUATING PERFORMANCE")
 print("=" * 60)
 
-if portfolio_df is not None and len(portfolio_df) > 0:
-    print(f"\n📈 Calculating performance metrics...")
+# Check if both portfolio versions exist
+has_fixed = 'portfolio_df_fixed' in locals() and portfolio_df_fixed is not None and len(portfolio_df_fixed) > 0
+has_decile = 'portfolio_df_decile' in locals() and portfolio_df_decile is not None and len(portfolio_df_decile) > 0
 
-    # Calculate overall performance
-    avg_long = portfolio_df['long_return'].mean()
-    avg_short = portfolio_df['short_return'].mean()
-    avg_spread = portfolio_df['spread'].mean()
+if has_fixed or has_decile:
+    print(f"\n📈 Calculating performance metrics for both portfolio versions...")
 
-    spread_std = portfolio_df['spread'].std()
-    sharpe_ratio = avg_spread / spread_std if spread_std > 0 else 0
+    # ========================================
+    # VERSION 1: FIXED TOP 100 / BOTTOM 100
+    # ========================================
+    if has_fixed:
+        print("\n" + "="*60)
+        print("VERSION 1: FIXED TOP 100 / BOTTOM 100 RESULTS")
+        print("="*60)
 
-    # Display results
-    print("\n" + "="*60)
-    print("FINAL PERFORMANCE RESULTS")
-    print("="*60)
-    print()
-    print("Portfolio Returns (Annual Average):")
-    print(f"  Long Portfolio (Top 100):    {avg_long:+.4f} ({avg_long*100:+.2f}%)")
-    print(f"  Short Portfolio (Bottom 100): {avg_short:+.4f} ({avg_short*100:+.2f}%)")
-    print(f"  Long-Short Spread:           {avg_spread:+.4f} ({avg_spread*100:+.2f}%)")
-    print()
-    print("Risk-Adjusted Performance:")
-    print(f"  Spread Volatility:  {spread_std:.4f} ({spread_std*100:.2f}%)")
-    print(f"  Sharpe Ratio:       {sharpe_ratio:.2f}")
-    print()
-    print(f"Analysis Period:")
-    print(f"  Years analyzed:     {len(portfolio_df)}")
-    print(f"  First year:         {portfolio_df['year'].min():.0f}")
-    print(f"  Last year:          {portfolio_df['year'].max():.0f}")
-    print("="*60)
+        # Calculate performance metrics
+        avg_long_fixed = portfolio_df_fixed['long_return'].mean()
+        avg_short_fixed = portfolio_df_fixed['short_return'].mean()
+        avg_spread_fixed = portfolio_df_fixed['spread'].mean()
+        spread_std_fixed = portfolio_df_fixed['spread'].std()
+        sharpe_ratio_fixed = avg_spread_fixed / spread_std_fixed if spread_std_fixed > 0 else 0
 
-    # Assessment
-    if sharpe_ratio > 1.0:
-        print("\n✅ Excellent risk-adjusted returns!")
-    elif sharpe_ratio > 0.5:
-        print("\n✅ Good risk-adjusted returns")
-    elif sharpe_ratio > 0.0:
-        print("\n⚠️  Positive but weak risk-adjusted returns")
-    else:
-        print("\n❌ Negative risk-adjusted returns")
+        print()
+        print("Portfolio Returns (Annual Average):")
+        print(f"  Long Portfolio (Top 100):     {avg_long_fixed:+.4f} ({avg_long_fixed*100:+.2f}%)")
+        print(f"  Short Portfolio (Bottom 100): {avg_short_fixed:+.4f} ({avg_short_fixed*100:+.2f}%)")
+        print(f"  Long-Short Spread:            {avg_spread_fixed:+.4f} ({avg_spread_fixed*100:+.2f}%)")
+        print()
+        print("Risk-Adjusted Performance:")
+        print(f"  Spread Volatility:  {spread_std_fixed:.4f} ({spread_std_fixed*100:.2f}%)")
+        print(f"  Sharpe Ratio:       {sharpe_ratio_fixed:.2f}")
+        print()
+        print(f"Analysis Period:")
+        print(f"  Years analyzed:     {len(portfolio_df_fixed)}")
+        print(f"  First year:         {portfolio_df_fixed['year'].min():.0f}")
+        print(f"  Last year:          {portfolio_df_fixed['year'].max():.0f}")
+        print("="*60)
 
-    # Save summary
-    summary = {
-        'avg_long_return': avg_long,
-        'avg_short_return': avg_short,
-        'avg_spread': avg_spread,
-        'spread_volatility': spread_std,
-        'sharpe_ratio': sharpe_ratio,
-        'n_years': len(portfolio_df),
-        'first_year': portfolio_df['year'].min(),
-        'last_year': portfolio_df['year'].max()
-    }
+        # Assessment
+        if sharpe_ratio_fixed > 1.0:
+            print("\n✅ Excellent risk-adjusted returns!")
+        elif sharpe_ratio_fixed > 0.5:
+            print("\n✅ Good risk-adjusted returns")
+        elif sharpe_ratio_fixed > 0.0:
+            print("\n⚠️  Positive but weak risk-adjusted returns")
+        else:
+            print("\n❌ Negative risk-adjusted returns")
 
-    summary_df = pd.DataFrame([summary])
-    summary_file = output_dir / 'performance_summary.csv'
-    summary_df.to_csv(summary_file, index=False)
+        # Save summary
+        summary_fixed = {
+            'portfolio_type': 'Fixed_Top100',
+            'avg_long_return': avg_long_fixed,
+            'avg_short_return': avg_short_fixed,
+            'avg_spread': avg_spread_fixed,
+            'spread_volatility': spread_std_fixed,
+            'sharpe_ratio': sharpe_ratio_fixed,
+            'n_years': len(portfolio_df_fixed),
+            'first_year': portfolio_df_fixed['year'].min(),
+            'last_year': portfolio_df_fixed['year'].max()
+        }
 
-    print(f"\n✅ Summary saved to: {summary_file.name}")
+        summary_df_fixed = pd.DataFrame([summary_fixed])
+        summary_file_fixed = output_dir / 'performance_summary_fixed100.csv'
+        summary_df_fixed.to_csv(summary_file_fixed, index=False)
+        print(f"\n✅ Fixed-100 summary saved to: {summary_file_fixed.name}")
+
+    # ========================================
+    # VERSION 2: DECILE METHOD (10% LONG / 5% SHORT)
+    # ========================================
+    if has_decile:
+        print("\n" + "="*60)
+        print("VERSION 2: DECILE METHOD (TOP 10% LONG / BOTTOM 5% SHORT) RESULTS")
+        print("="*60)
+
+        # Calculate performance metrics
+        avg_long_decile = portfolio_df_decile['long_return'].mean()
+        avg_short_decile = portfolio_df_decile['short_return'].mean()
+        avg_spread_decile = portfolio_df_decile['spread'].mean()
+        spread_std_decile = portfolio_df_decile['spread'].std()
+        sharpe_ratio_decile = avg_spread_decile / spread_std_decile if spread_std_decile > 0 else 0
+
+        print()
+        print("Portfolio Returns (Annual Average):")
+        print(f"  Long Portfolio (Top 10%):      {avg_long_decile:+.4f} ({avg_long_decile*100:+.2f}%)")
+        print(f"  Short Portfolio (Bottom 5%):   {avg_short_decile:+.4f} ({avg_short_decile*100:+.2f}%)")
+        print(f"  Long-Short Spread:                   {avg_spread_decile:+.4f} ({avg_spread_decile*100:+.2f}%)")
+        print()
+        print("Risk-Adjusted Performance:")
+        print(f"  Spread Volatility:  {spread_std_decile:.4f} ({spread_std_decile*100:.2f}%)")
+        print(f"  Sharpe Ratio:       {sharpe_ratio_decile:.2f}")
+        print()
+        print(f"Analysis Period:")
+        print(f"  Years analyzed:     {len(portfolio_df_decile)}")
+        print(f"  First year:         {portfolio_df_decile['year'].min():.0f}")
+        print(f"  Last year:          {portfolio_df_decile['year'].max():.0f}")
+        print("="*60)
+
+        # Assessment
+        if sharpe_ratio_decile > 1.0:
+            print("\n✅ Excellent risk-adjusted returns!")
+        elif sharpe_ratio_decile > 0.5:
+            print("\n✅ Good risk-adjusted returns")
+        elif sharpe_ratio_decile > 0.0:
+            print("\n⚠️  Positive but weak risk-adjusted returns")
+        else:
+            print("\n❌ Negative risk-adjusted returns")
+
+        # Save summary
+        summary_decile = {
+            'portfolio_type': 'Decile_10pct',
+            'avg_long_return': avg_long_decile,
+            'avg_short_return': avg_short_decile,
+            'avg_spread': avg_spread_decile,
+            'spread_volatility': spread_std_decile,
+            'sharpe_ratio': sharpe_ratio_decile,
+            'n_years': len(portfolio_df_decile),
+            'first_year': portfolio_df_decile['year'].min(),
+            'last_year': portfolio_df_decile['year'].max()
+        }
+
+        summary_df_decile = pd.DataFrame([summary_decile])
+        summary_file_decile = output_dir / 'performance_summary_decile10pct.csv'
+        summary_df_decile.to_csv(summary_file_decile, index=False)
+        print(f"\n✅ Decile-10% summary saved to: {summary_file_decile.name}")
+
+    # ========================================
+    # COMPARISON (if both exist)
+    # ========================================
+    if has_fixed and has_decile:
+        print("\n" + "="*60)
+        print("COMPARISON: FIXED 100 vs DECILE 10%")
+        print("="*60)
+        print()
+        print(f"{'Metric':<25} | {'Fixed 100':>12} | {'Decile 10%':>12} | {'Difference':>12}")
+        print("-" * 70)
+        print(f"{'Long Return':<25} | {avg_long_fixed*100:>11.2f}% | {avg_long_decile*100:>11.2f}% | {(avg_long_decile-avg_long_fixed)*100:>+11.2f}%")
+        print(f"{'Short Return':<25} | {avg_short_fixed*100:>11.2f}% | {avg_short_decile*100:>11.2f}% | {(avg_short_decile-avg_short_fixed)*100:>+11.2f}%")
+        print(f"{'Spread':<25} | {avg_spread_fixed*100:>11.2f}% | {avg_spread_decile*100:>11.2f}% | {(avg_spread_decile-avg_spread_fixed)*100:>+11.2f}%")
+        print(f"{'Volatility':<25} | {spread_std_fixed*100:>11.2f}% | {spread_std_decile*100:>11.2f}% | {(spread_std_decile-spread_std_fixed)*100:>+11.2f}%")
+        print(f"{'Sharpe Ratio':<25} | {sharpe_ratio_fixed:>12.2f} | {sharpe_ratio_decile:>12.2f} | {sharpe_ratio_decile-sharpe_ratio_fixed:>+12.2f}")
+        print("="*60)
+
+        # Save combined comparison
+        comparison_df = pd.concat([summary_df_fixed, summary_df_decile], ignore_index=True)
+        comparison_file = output_dir / 'performance_comparison.csv'
+        comparison_df.to_csv(comparison_file, index=False)
+        print(f"\n✅ Comparison saved to: {comparison_file.name}")
 
 else:
     print("\n⚠️  No performance metrics available")

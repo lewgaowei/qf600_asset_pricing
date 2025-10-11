@@ -43,6 +43,8 @@ ALL_ACCOUNTING_VARIABLES = [
     # Basic identifiers and denominators
     "gvkey", "datadate", "fyear", "fyr", "indfmt", "datafmt", "popsrc", "consol",
     "csho", "prcc_f",  # for market cap
+    
+    
     "at", "act", "invt", "ppent", "lt", "lct", "dltt", "ceq", "seq", "icapt",
     "sale", "cogs", "xsga", "emp",  # denominators
     
