@@ -1,9 +1,0 @@
-Evolved Formula for Counter 11
-============================================================
-
-sub(X4, X4)
-
-Program Stats:
-  Length: 11
-  Depth: 1
-  R² on validation: -0.0098

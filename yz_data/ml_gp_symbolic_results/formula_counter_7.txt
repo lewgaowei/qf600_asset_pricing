@@ -1,9 +1,0 @@
-Evolved Formula for Counter 7
-============================================================
-
-X3
-
-Program Stats:
-  Length: 2
-  Depth: 0
-  R² on validation: -0.2411

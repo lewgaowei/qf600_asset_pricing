@@ -1,9 +1,0 @@
-Evolved Formula for Counter 10
-============================================================
-
-mul(mul(X12, X2), mul(X11, X1))
-
-Program Stats:
-  Length: 31
-  Depth: 2
-  R² on validation: -0.4311

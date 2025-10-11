@@ -1,9 +1,0 @@
-Evolved Formula for Counter 16
-============================================================
-
-0.074
-
-Program Stats:
-  Length: 5
-  Depth: 0
-  R² on validation: -0.0510

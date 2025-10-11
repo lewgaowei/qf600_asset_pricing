@@ -1,0 +1,26 @@
+PySR Evolved Formula for Counter 9
+============================================================
+
+complexity                                     3
+loss                                    0.381207
+equation                        x59 * 0.24124445
+score                                   0.028765
+sympy_format                      x59*0.24124445
+lambda_format    PySRFunction(X=>x59*0.24124445)
+Name: 1, dtype: object
+
+Equation Stats:
+  Length: 316
+  Complexity: 1
+  R² on validation: -0.9712
+
+
+Full Equation Hall of Fame:
+============================================================
+   complexity      loss                                                    equation     score                                          sympy_format                                                          lambda_format
+0           1  0.403780                                                  0.08902514  0.000000                                    0.0890251400000000                                    PySRFunction(X=>0.0890251400000000)
+1           3  0.381207                                            x59 * 0.24124445  0.028765                                        x59*0.24124445                                        PySRFunction(X=>x59*0.24124445)
+2           6  0.368756                          0.19645086 - abs(x266 * 0.4818474)  0.011068                      0.19645086 - 0.4818474*Abs(x266)                      PySRFunction(X=>0.19645086 - 0.4818474*Abs(x266))
+3           8  0.368352           abs(-0.41106242) * (abs(-0.43069968) - abs(x266))  0.000549                   0.41106242*(0.43069968 - Abs(x266))                   PySRFunction(X=>0.41106242*(0.43069968 - Abs(x266)))
+4          10  0.364763        (abs(0.7335815 - abs(x32)) - abs(x266)) * 0.39173812  0.004895   (-Abs(x266) + Abs(Abs(x32) - 0.7335815))*0.39173812   PySRFunction(X=>(-Abs(x266) + Abs(Abs(x32) - 0.7335815))*0.39173812)
+5          11  0.364552  (abs(0.64231575 - abs(x32)) - abs(x266)) * abs(0.40278625)  0.000579  (-Abs(x266) + Abs(Abs(x32) - 0.64231575))*0.40278625  PySRFunction(X=>(-Abs(x266) + Abs(Abs(x32) - 0.64231575))*0.40278625)

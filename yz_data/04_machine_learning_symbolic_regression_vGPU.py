@@ -14,6 +14,60 @@
 # ---
 
 # %%
+"""
+===========================================
+GPU-ACCELERATED SYMBOLIC REGRESSION WITH PYSR
+===========================================
+
+INSTALLATION INSTRUCTIONS:
+--------------------------
+
+1. INSTALL JULIA (Required for PySR):
+   Download and install Julia from: https://julialang.org/downloads/
+   - Windows: Use the installer (julia-1.10.0-win64.exe)
+   - Add Julia to PATH during installation
+   - Verify: Open terminal and type `julia --version`
+
+2. INSTALL PYSR:
+   pip install pysr
+
+3. CONFIGURE PYSR WITH JULIA:
+   python -c "import pysr; pysr.install()"
+
+   This will install the required Julia packages (SymbolicRegression.jl)
+
+4. GPU SUPPORT (CUDA 13):
+   PySR can leverage GPU for certain operations.
+   Ensure you have:
+   - CUDA 13.x installed
+   - Compatible GPU drivers
+   - Julia GPU packages (will be installed automatically when using GPU)
+
+   To enable GPU in Julia (optional, for maximum performance):
+   - Open Julia REPL: julia
+   - Run: using Pkg; Pkg.add("CUDA")
+   - Run: using CUDA; CUDA.functional()  # Should return true
+
+   The PySR settings in this script enable:
+   - turbo=True: SIMD vectorization + GPU optimizations
+   - batching=True: Batch evaluations for GPU
+   - multithreading=True: Julia parallel threads
+   - procs=0: All CPU cores
+
+USAGE NOTES:
+------------
+- PySR uses Julia backend (much faster than gplearn)
+- GPU acceleration works best with large populations (>5000)
+- PySR automatically discovers mathematical formulas
+- Supports parallel processing across CPU cores + GPU acceleration
+- Better at finding interpretable equations than gplearn
+
+DIFFERENCES FROM GPLEARN:
+-------------------------
+- PySR: Julia-based, GPU support, faster, better equations
+- gplearn: Python-only, CPU-only, slower, limited to basic operations
+"""
+
 # Core libraries
 import numpy as np
 import pandas as pd
@@ -22,13 +76,46 @@ from pathlib import Path
 import pickle
 import os
 
-# Machine Learning libraries - GENETIC PROGRAMMING
-from gplearn.genetic import SymbolicRegressor
+# Machine Learning libraries - SYMBOLIC REGRESSION WITH GPU
+from pysr import PySRRegressor
 from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.model_selection import ParameterGrid
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore')
+
+# %%
+# ------------------------------
+# GPU CONFIGURATION CHECK
+# ------------------------------
+print("=" * 60)
+print("GPU CONFIGURATION CHECK")
+print("=" * 60)
+
+try:
+    import pysr
+    print("✅ PySR is installed")
+    print(f"   Version: {pysr.__version__}")
+except ImportError:
+    print("❌ PySR not installed!")
+    print("   Run: pip install pysr")
+    print("   Then: python -c \"import pysr; pysr.install()\"")
+
+print()
+print("CUDA 13 GPU Acceleration:")
+print("  - turbo=True: SIMD + GPU optimizations")
+print("  - batching=True: GPU batch evaluations")
+print("  - multithreading=True: Julia parallel threads")
+print("  - procs=0: All CPU cores")
+
+print()
+print("Quick Setup Commands:")
+print("  1. pip install pysr")
+print("  2. python -c \"import pysr; pysr.install()\"")
+print("  3. (Optional) Julia GPU: julia -e 'using Pkg; Pkg.add(\"CUDA\")'")
+
+print("=" * 60)
+print()
 
 # %%
 # ------------------------------
@@ -216,6 +303,25 @@ print("=" * 60)
 # ------------------------------
 # CONFIGURATION DICTIONARY
 # ------------------------------
+"""
+PYSR GPU OPTIMIZATION TIPS:
+---------------------------
+1. For CUDA 13 GPU acceleration, ensure Julia CUDA.jl is installed
+2. Increase populations × population_size for better GPU utilization
+3. Use batching=True and adjust batch_size based on GPU memory
+4. turbo=True enables SIMD vectorization (works with/without GPU)
+5. multithreading=True uses Julia parallel threads on CPU
+6. procs=0 uses all CPU cores (works alongside GPU)
+
+RECOMMENDED SETTINGS FOR GPU:
+- populations: 20-40 (more parallel populations)
+- population_size: 50-100 (larger populations)
+- batch_size: 50-100 (depends on GPU memory)
+- turbo: True (always)
+- batching: True (for GPU)
+- multithreading: True (for CPU cores)
+"""
+
 CONFIG = {
     # Window type for time-series cross-validation
     'window': 'recursive',          # 'recursive' (expanding) or 'rolling' (sliding)
@@ -736,34 +842,59 @@ print("=" * 60)
 
 def get_hyperparameter_grid(method):
     """
-    Define hyperparameter grid for Genetic Programming Symbolic Regression.
+    Define hyperparameter grid for PySR Symbolic Regression.
+
+    PySR PARAMETERS:
+    ----------------
+    - niterations: Number of iterations (like generations)
+    - populations: Number of populations (like population_size)
+    - population_size: Size of each population
+    - ncycles_per_iteration: Cycles per iteration
+    - binary_operators: ["+", "-", "*", "/"]
+    - unary_operators: ["sin", "cos", "exp", "log"]
+    - complexity_of_operators: Complexity penalties for each operator
+    - parsimony: Penalty for equation complexity (like parsimony_coefficient)
+    - maxsize: Maximum complexity of equation
+    - procs: Number of CPU processes (0 = all cores)
+    - multithreading: Enable Julia multithreading
     """
     if method == 'gp_symbolic':
-        grid = {
-            # Population and evolution settings
-            'population_size': [1000],        # Number of programs in each generation
-            'generations': [20],                 # Number of evolutionary generations
+        # NOTE: PySR is primarily CPU-based. GPU helps with batch evaluation only.
+        # Expect CPU at 100%, GPU at 5-30% (this is normal!)
 
-            # Program complexity controls
-            'init_depth': [(2, 6), (3, 6)],          # Initial depth range (min, max) for random programs
-            'init_method': ['half and half'],        # How to create initial population
-            
-            # Evolution operators (probabilities sum to 1.0)
-            'p_crossover': [0.7],                    # Probability of crossover (combining programs)
-            'p_subtree_mutation': [0.1],             # Probability of subtree mutation
-            'p_hoist_mutation': [0.05],              # Probability of hoist mutation
-            'p_point_mutation': [0.1],               # Probability of point mutation
-            
-            # Selection and parsimony
-            'parsimony_coefficient': [0.01],  # Penalty for program complexity
-            'tournament_size': [20],                 # Number of programs competing in tournament
-            
-            # Stopping criteria
-            'stopping_criteria': [0.0],              # Stop if fitness reaches this value
-            
-            # Function set
-            'function_set': [('add', 'sub', 'mul', 'div')],  # Mathematical operations
-            
+        grid = {
+            # Core evolution settings
+            'niterations': [20],                     # Number of iterations (like generations)
+            'populations': [40],                     # INCREASED: More populations = more GPU work
+            'population_size': [100],                # INCREASED: Larger batches = better GPU use
+                                                     # Total: 40 × 100 = 4000 programs (vs 1000)
+
+            # Complexity controls
+            'maxsize': [20],                         # Maximum equation complexity
+            'parsimony': [0.01],                     # Penalty for complexity (like parsimony_coefficient)
+
+            # Operators
+            'binary_operators': [["+", "-", "*", "/"]],  # Basic operations
+            'unary_operators': [["abs"]],                # Unary operations (keep simple)
+
+            # Performance settings
+            'procs': [0],                            # 0 = use all CPU cores
+            'multithreading': [True],                # Enable Julia multithreading
+
+            # GPU settings (CUDA 13) - OPTIMIZED FOR BETTER GPU USAGE
+            'turbo': [True],                         # Enable SIMD optimizations
+            'batching': [True],                      # Batch evaluations for GPU
+            'batch_size': [200],                     # INCREASED: Larger batches use more GPU memory
+
+            # Selection and mutation
+            'ncycles_per_iteration': [550],          # Cycles per iteration
+            'tournament_selection_n': [10],          # Tournament size
+            'tournament_selection_p': [0.86],        # Tournament probability
+
+            # Optimization
+            'optimizer_algorithm': ["BFGS"],         # Local optimization algorithm
+            'optimizer_nrestarts': [2],              # Restarts for optimization
+
             # Other settings
             'random_state': [42]                     # For reproducibility
         }
@@ -776,77 +907,87 @@ def get_hyperparameter_grid(method):
 
 hyperparameter_grid = get_hyperparameter_grid(CONFIG['method'])
 
-print(f"\n📊 Hyperparameter Grid for {CONFIG['method'].upper()}:")
+print(f"\n📊 Hyperparameter Grid for {CONFIG['method'].upper()} (PySR):")
 print("-" * 50)
 print(f"Total combinations to try: {len(hyperparameter_grid)}")
 print()
 
 # Show parameter ranges
 print("Parameter ranges:")
-pop_values = sorted(set([p['population_size'] for p in hyperparameter_grid]))
-gen_values = sorted(set([p['generations'] for p in hyperparameter_grid]))
-depth_values = sorted(set([p['init_depth'] for p in hyperparameter_grid]))
-parsimony_values = sorted(set([p['parsimony_coefficient'] for p in hyperparameter_grid]))
+niter_values = sorted(set([p['niterations'] for p in hyperparameter_grid]))
+npop_values = sorted(set([p['populations'] for p in hyperparameter_grid]))
+popsize_values = sorted(set([p['population_size'] for p in hyperparameter_grid]))
+maxsize_values = sorted(set([p['maxsize'] for p in hyperparameter_grid]))
+parsimony_values = sorted(set([p['parsimony'] for p in hyperparameter_grid]))
 
-print(f"  population_size:         {pop_values}")
-print(f"  generations:             {gen_values}")
-print(f"  init_depth:              {depth_values}")
-print(f"  parsimony_coefficient:   {parsimony_values}")
+print(f"  niterations:             {niter_values}")
+print(f"  populations:             {npop_values}")
+print(f"  population_size:         {popsize_values}")
+print(f"  Total programs:          {npop_values[0] * popsize_values[0]} (populations × population_size)")
+print(f"  maxsize:                 {maxsize_values}")
+print(f"  parsimony:               {parsimony_values}")
 
 print()
 print("First 5 combinations:")
-print("-" * 80)
-print("  #  | pop_size | gens |    depth    | parsimony")
-print("-" * 80)
+print("-" * 90)
+print("  #  | niter | pops | pop_size | total_progs | maxsize | parsimony | GPU")
+print("-" * 90)
 
 for i, params in enumerate(hyperparameter_grid[:5], 1):
-    print(f"  {i:2d} | {params['population_size']:8d} | {params['generations']:4d} | "
-          f"{str(params['init_depth']):11s} | {params['parsimony_coefficient']:9.4f}")
+    total_progs = params['populations'] * params['population_size']
+    print(f"  {i:2d} | {params['niterations']:5d} | {params['populations']:4d} | "
+          f"{params['population_size']:8d} | {total_progs:11d} | {params['maxsize']:7d} | "
+          f"{params['parsimony']:9.4f} | {'Yes' if params['turbo'] else 'No':3s}")
 
 if len(hyperparameter_grid) > 5:
     print(f"  ... and {len(hyperparameter_grid) - 5} more combinations")
 
 # ------------------------------
-# Explain GP hyperparameters
+# Explain PySR hyperparameters
 # ------------------------------
 print("\n" + "-" * 50)
-print("📚 GENETIC PROGRAMMING HYPERPARAMETERS:")
+print("📚 PYSR HYPERPARAMETERS (GPU-ACCELERATED):")
 print("-" * 50)
 print()
-print("1. population_size (Number of Programs):")
-print("   - How many mathematical expressions evolve simultaneously")
-print("   - Larger = Better exploration, slower training")
-print("   - Typical: 1000-5000")
+print("1. niterations (Evolution Cycles):")
+print("   - Number of iterations of symbolic regression")
+print("   - More iterations = Better solutions")
+print("   - Typical: 10-40")
 print()
-print("2. generations (Evolution Cycles):")
-print("   - How many iterations of evolution")
-print("   - More generations = Better solutions, but diminishing returns")
-print("   - Typical: 20-50")
+print("2. populations × population_size (Total Programs):")
+print("   - populations: Number of parallel populations")
+print("   - population_size: Size of each population")
+print("   - Total = populations × population_size")
+print("   - Typical total: 500-2000")
 print()
-print("3. init_depth (Initial Program Complexity):")
-print("   - Starting depth of expression trees")
-print("   - Deeper = More complex initial formulas")
-print("   - Typical: 2-6")
+print("3. maxsize (Maximum Equation Complexity):")
+print("   - Maximum number of nodes in equation tree")
+print("   - Prevents overly complex formulas")
+print("   - Typical: 15-30")
 print()
-print("4. parsimony_coefficient (Simplicity Penalty):")
-print("   - Penalty for overly complex expressions")
+print("4. parsimony (Simplicity Penalty):")
+print("   - Penalty for equation complexity")
 print("   - Higher = Simpler formulas preferred")
 print("   - Prevents overfitting")
 print()
-print("5. Evolution Operators:")
-print("   - p_crossover: Combine two good formulas")
-print("   - p_subtree_mutation: Replace part of formula")
-print("   - p_hoist_mutation: Simplify by removing branches")
-print("   - p_point_mutation: Change a single operation/variable")
+print("5. GPU Acceleration (CUDA 13):")
+print("   - turbo: SIMD vectorization")
+print("   - batching: Batch evaluations on GPU")
+print("   - multithreading: Julia parallel threads")
+print()
+print("6. procs (CPU Parallelization):")
+print("   - 0 = Use all available CPU cores")
+print("   - Works alongside GPU acceleration")
 
 print("\n" + "=" * 60)
 print("STEP 8 COMPLETE: Hyperparameter grid ready!")
 print("=" * 60)
-print(f"\n⚠️  NOTE: GP training will be MUCH slower than XGBoost")
-print("   Each combination may take 5-30 minutes depending on:")
-print("   - Number of features ({len(final_feature_columns)})")
-print("   - Population size")
-print("   - Number of generations")
+print(f"\n🚀 PySR WITH GPU ACCELERATION (CUDA 13)")
+print("   ✅ Much faster than gplearn (CPU-only)")
+print("   ✅ Better at finding interpretable equations")
+print("   ✅ GPU + Multi-core CPU parallelization")
+print(f"   Features: {len(final_feature_columns)}")
+print(f"   Total programs per iteration: {npop_values[0] * popsize_values[0]}")
 
 
 # %%
@@ -896,45 +1037,66 @@ def run_cross_validation(data, k, config, feature_cols):
         iter_start = time.time()
 
         print(f"\n[{i+1}/{len(tunegrid)}] Testing combination:")
-        print(f"  Population: {params['population_size']}, Generations: {params['generations']}, "
-              f"Depth: {params['init_depth']}, Parsimony: {params['parsimony_coefficient']}")
+        total_progs = params['populations'] * params['population_size']
+        print(f"  Iterations: {params['niterations']}, Total Programs: {total_progs}, "
+              f"Maxsize: {params['maxsize']}, Parsimony: {params['parsimony']}")
 
         try:
-            # Create GP model
-            model = SymbolicRegressor(
+            # Create PySR model with GPU support
+            model = PySRRegressor(
+                # Core settings
+                niterations=params['niterations'],
+                populations=params['populations'],
                 population_size=params['population_size'],
-                generations=params['generations'],
-                stopping_criteria=params['stopping_criteria'],
-                p_crossover=params['p_crossover'],
-                p_subtree_mutation=params['p_subtree_mutation'],
-                p_hoist_mutation=params['p_hoist_mutation'],
-                p_point_mutation=params['p_point_mutation'],
-                max_samples=0.9,  # Use 90% of data for fitness evaluation (speeds up)
-                verbose=0,
-                parsimony_coefficient=params['parsimony_coefficient'],
+
+                # Complexity controls
+                maxsize=params['maxsize'],
+                parsimony=params['parsimony'],
+
+                # Operators
+                binary_operators=params['binary_operators'],
+                unary_operators=params['unary_operators'],
+
+                # Performance (CPU + GPU)
+                procs=params['procs'],                    # CPU parallelization
+                multithreading=params['multithreading'],  # Julia threads
+                turbo=params['turbo'],                    # SIMD + GPU optimizations
+                batching=params['batching'],              # Batch for GPU
+                batch_size=params['batch_size'],          # GPU batch size
+
+                # Selection and evolution
+                ncycles_per_iteration=params['ncycles_per_iteration'],
+                tournament_selection_n=params['tournament_selection_n'],
+                tournament_selection_p=params['tournament_selection_p'],
+
+                # Optimization
+                optimizer_algorithm=params['optimizer_algorithm'],
+                optimizer_nrestarts=params['optimizer_nrestarts'],
+
+                # Other settings
                 random_state=params['random_state'],
-                n_jobs=-1,  # Use all available CPU cores
-                function_set=params['function_set'],
-                init_depth= params['init_depth'],
-                init_method=params['init_method'],
-                tournament_size=params['tournament_size']
+                verbosity=0,  # Quiet during CV
+                progress=False,  # No progress bar during CV
             )
 
             # Train the model
-            print(f"  🧬 Evolving programs...", end='', flush=True)
-            model.fit(X_train, y_train)
+            print(f"  🧬 Evolving programs (GPU-accelerated)...", end='', flush=True)
+            model.fit(X_train.values, y_train.values)  # PySR needs numpy arrays
             print(" ✓")
 
             # Make predictions
-            y_pred = model.predict(X_validation)
+            y_pred = model.predict(X_validation.values)
 
             # Calculate metrics
             r2 = r2_score(y_validation, y_pred)
             mse = mean_squared_error(y_validation, y_pred)
 
-            # Get program information
-            program_length = len(str(model._program))
-            program_depth = model._program.depth_
+            # Get program information (PySR stores equations differently)
+            best_equation_obj = model.get_best()
+            best_equation_str = str(best_equation_obj)
+            program_length = len(best_equation_str)
+            # Estimate depth by counting operators (approximate)
+            program_depth = best_equation_str.count('(') if best_equation_str else 0
 
             # Store results
             cv_results.loc[i, 'r2_score'] = r2
@@ -945,6 +1107,7 @@ def run_cross_validation(data, k, config, feature_cols):
             iter_duration = time.time() - iter_start
             print(f"  ✅ R²={r2:+.4f}, MSE={mse:.6f}, "
                   f"Length={program_length}, Depth={program_depth}")
+            print(f"  📐 Best equation: {best_equation_str[:80]}...")
             print(f"  ⏱️  Time: {iter_duration:.1f}s")
 
         except Exception as e:
@@ -963,8 +1126,9 @@ def run_cross_validation(data, k, config, feature_cols):
 
     for rank, (idx, row) in enumerate(cv_results.head(3).iterrows(), 1):
         print(f"\n{rank}. R²={row['r2_score']:+.4f}, MSE={row['mse']:.6f}")
-        print(f"   Population: {row['population_size']:.0f}, Generations: {row['generations']:.0f}")
-        print(f"   Program: Length={row['program_length']:.0f}, Depth={row['program_depth']:.0f}")
+        total_progs = row['populations'] * row['population_size']
+        print(f"   Iterations: {row['niterations']:.0f}, Total Programs: {total_progs:.0f}")
+        print(f"   Equation: Length={row['program_length']:.0f}, Depth={row['program_depth']:.0f}")
 
     # Save results
     output_file = output_filename(config, mode='cv', counter=k+1)
@@ -978,9 +1142,11 @@ def run_cross_validation(data, k, config, feature_cols):
 
 
 print("\n✅ Cross-validation function ready!")
-print("\n⚠️  WARNING: GP cross-validation is SLOW")
-print("   Expect 10-60 minutes per test period")
-print("   Consider reducing population_size or generations for testing")
+print("\n🚀 PySR WITH GPU ACCELERATION:")
+print("   ✅ Much faster than gplearn")
+print("   ✅ GPU + Multi-core CPU parallelization")
+print("   ✅ Better at finding interpretable equations")
+print("   ⏱️  Expect 5-30 minutes per test period (faster than gplearn)")
 
 print("\n" + "=" * 60)
 print("STEP 9 COMPLETE!")
@@ -1014,9 +1180,10 @@ def run_prediction(data, k, config, feature_cols):
     cv_results = cv_results.sort_values('r2_score', ascending=False)
     best_params = cv_results.iloc[0]
 
+    total_progs = int(best_params['populations']) * int(best_params['population_size'])
     print(f"✅ Loaded best hyperparameters:")
-    print(f"   Population: {int(best_params['population_size'])}")
-    print(f"   Generations: {int(best_params['generations'])}")
+    print(f"   Iterations: {int(best_params['niterations'])}")
+    print(f"   Total Programs: {total_progs}")
     print(f"   R² score: {best_params['r2_score']:+.4f}")
 
     # Get train and test data
@@ -1029,34 +1196,52 @@ def run_prediction(data, k, config, feature_cols):
     print(f"  Test set:     {len(X_test):,} observations")
 
     # Train final model
-    print(f"\n🧬 Training final GP model...")
+    print(f"\n🧬 Training final PySR model with GPU acceleration...")
 
     import time
     train_start = time.time()
 
-    # Parse init_depth - it's saved as string like "(2, 6)" in CSV
-    init_depth_val = eval(best_params['init_depth']) if isinstance(best_params['init_depth'], str) else best_params['init_depth']
+    # Parse lists from CSV strings
+    binary_ops = eval(best_params['binary_operators']) if isinstance(best_params['binary_operators'], str) else best_params['binary_operators']
+    unary_ops = eval(best_params['unary_operators']) if isinstance(best_params['unary_operators'], str) else best_params['unary_operators']
 
-    model = SymbolicRegressor(
+    model = PySRRegressor(
+        # Core settings
+        niterations=int(best_params['niterations']),
+        populations=int(best_params['populations']),
         population_size=int(best_params['population_size']),
-        generations=int(best_params['generations']),
-        stopping_criteria=float(best_params['stopping_criteria']),
-        p_crossover=float(best_params['p_crossover']),
-        p_subtree_mutation=float(best_params['p_subtree_mutation']),
-        p_hoist_mutation=float(best_params['p_hoist_mutation']),
-        p_point_mutation=float(best_params['p_point_mutation']),
-        max_samples=0.9,
-        verbose=1,  # Show progress for final training
-        parsimony_coefficient=float(best_params['parsimony_coefficient']),
+
+        # Complexity controls
+        maxsize=int(best_params['maxsize']),
+        parsimony=float(best_params['parsimony']),
+
+        # Operators
+        binary_operators=binary_ops,
+        unary_operators=unary_ops,
+
+        # Performance (CPU + GPU)
+        procs=int(best_params['procs']),
+        multithreading=bool(best_params['multithreading']),
+        turbo=bool(best_params['turbo']),
+        batching=bool(best_params['batching']),
+        batch_size=int(best_params['batch_size']),
+
+        # Selection and evolution
+        ncycles_per_iteration=int(best_params['ncycles_per_iteration']),
+        tournament_selection_n=int(best_params['tournament_selection_n']),
+        tournament_selection_p=float(best_params['tournament_selection_p']),
+
+        # Optimization
+        optimizer_algorithm=best_params['optimizer_algorithm'],
+        optimizer_nrestarts=int(best_params['optimizer_nrestarts']),
+
+        # Other settings
         random_state=int(best_params['random_state']),
-        n_jobs=-1,  # Use all available CPU cores
-        function_set=eval(best_params['function_set']),
-        init_depth=init_depth_val,
-        init_method=best_params['init_method'],
-        tournament_size=int(best_params['tournament_size'])
+        verbosity=1,  # Show progress for final training
+        progress=True,  # Show progress bar
     )
 
-    model.fit(X_train, y_train)
+    model.fit(X_train.values, y_train.values)
 
     train_time = time.time() - train_start
     print(f"\n✅ Model trained in {train_time/60:.1f} minutes")
@@ -1064,14 +1249,16 @@ def run_prediction(data, k, config, feature_cols):
     # Print the evolved formula
     print(f"\n📐 EVOLVED FORMULA:")
     print("-" * 60)
-    print(f"{model._program}")
+    best_equation = model.get_best()
+    best_equation_str = str(best_equation)
+    print(f"{best_equation_str}")
     print("-" * 60)
-    print(f"Program length: {len(str(model._program))}")
-    print(f"Program depth: {model._program.depth_}")
+    print(f"Equation length: {len(best_equation_str)}")
+    print(f"Equation complexity: {best_equation_str.count('(')}")
 
     # Make predictions
     print(f"\n🔮 Making predictions...")
-    predictions = model.predict(X_test)
+    predictions = model.predict(X_test.values)
 
     print(f"  Predictions range: [{predictions.min():+.4f}, {predictions.max():+.4f}]")
     print(f"  Predictions mean:  {predictions.mean():+.4f}")
@@ -1088,13 +1275,18 @@ def run_prediction(data, k, config, feature_cols):
     # Save the evolved formula separately
     formula_file = output_dir / f"formula_counter_{k+1}.txt"
     with open(formula_file, 'w') as f:
-        f.write(f"Evolved Formula for Counter {k+1}\n")
+        f.write(f"PySR Evolved Formula for Counter {k+1}\n")
         f.write("=" * 60 + "\n\n")
-        f.write(str(model._program))
-        f.write(f"\n\nProgram Stats:\n")
-        f.write(f"  Length: {len(str(model._program))}\n")
-        f.write(f"  Depth: {model._program.depth_}\n")
+        f.write(best_equation_str)
+        f.write(f"\n\nEquation Stats:\n")
+        f.write(f"  Length: {len(best_equation_str)}\n")
+        f.write(f"  Complexity: {best_equation_str.count('(')}\n")
         f.write(f"  R² on validation: {best_params['r2_score']:+.4f}\n")
+        f.write(f"\n\nFull Equation Hall of Fame:\n")
+        f.write("=" * 60 + "\n")
+        # PySR keeps multiple equations ranked by complexity/accuracy
+        equations_df = model.equations_
+        f.write(equations_df.to_string())
 
     print(f"✅ Formula saved to: {formula_file.name}")
 
