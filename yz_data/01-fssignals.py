@@ -27,7 +27,7 @@ import sys
 def end_step(name):
     print(f"--- End of step: {name} ---", flush=True)
 
-START_YEAR = 2000
+START_YEAR = 2015
 require_wrds_load = False
 
 # %%

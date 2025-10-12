@@ -37,8 +37,10 @@ print("=" * 60)
 # ------------------------------
 # 1.1 Set up file paths
 # ------------------------------
-_base_dir = Path.cwd()
-START_YEAR = 2000
+# _base_dir = Path.cwd()
+_base_dir = Path(__file__).resolve().parent
+
+START_YEAR = 2015
 # Input data path (from 02-feature-engineering.py)
 data_path = _base_dir / f"signals_with_returns_and_tickers_{START_YEAR}.parquet"
 

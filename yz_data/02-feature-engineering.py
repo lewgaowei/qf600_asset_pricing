@@ -33,7 +33,7 @@ import sys
 def end_step(name):
     print(f"--- End of step: {name} ---", flush=True)
 
-START_YEAR = 2000
+START_YEAR = 2015
 require_wrds_load = False
 db = None
 ALLOW_WRDS_LOOKUP = True  # set True only if WRDS is available
@@ -982,7 +982,7 @@ target = train_clean['expected_return']
 # Progress tracking
 total_features = len(feature_columns)
 for i, col in enumerate(feature_columns):
-    if i % 2000 == 0:
+    if i % 2015 == 0:
         print(f"  Progress: {i:,}/{total_features:,} ({i/total_features*100:.1f}%)")
     
     try:
