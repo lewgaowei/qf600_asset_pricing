@@ -340,8 +340,8 @@ CONFIG = {
     
     # Feature selection
     'missing_threshold': 0.50,      # Drop features with > 50% missing data
-    'use_top_features': 1000,        # CRITICAL: GP works best with 50-150 features
-                                    # Too many features = exponential complexity
+    'use_top_features': 100,        # REDUCED: GP works best with 50-150 features
+                                    # 1000 features was too many → poor performance
     
     # Multicollinearity removal
     'remove_multicollinearity': True,  # Remove highly correlated features
@@ -864,18 +864,18 @@ def get_hyperparameter_grid(method):
 
         grid = {
             # Core evolution settings
-            'niterations': [20],                     # Number of iterations (like generations)
+            'niterations': [20, 30],                 # GRID SEARCH: Test more iterations for better solutions
             'populations': [40],                     # INCREASED: More populations = more GPU work
             'population_size': [100],                # INCREASED: Larger batches = better GPU use
                                                      # Total: 40 × 100 = 4000 programs (vs 1000)
 
             # Complexity controls
-            'maxsize': [20],                         # Maximum equation complexity
-            'parsimony': [0.01],                     # Penalty for complexity (like parsimony_coefficient)
+            'maxsize': [15, 20, 30],                 # GRID SEARCH: Test different complexity limits
+            'parsimony': [0.01, 0.1],                # FIXED: Test baseline vs. high (removed 0.001 to reduce combos)
 
             # Operators
             'binary_operators': [["+", "-", "*", "/"]],  # Basic operations
-            'unary_operators': [["abs"]],                # Unary operations (keep simple)
+            'unary_operators': [["abs"], ["abs", "square"], ["abs", "square", "sqrt", "log"]],  # FIXED: Add financial operators
 
             # Performance settings
             'procs': [0],                            # 0 = use all CPU cores
@@ -1445,10 +1445,10 @@ if final_predictions is not None and RUN_PRED:
         portfolio_df_fixed = None
         portfolio_df_decile = None
     else:
-        # VERSION 1: Fixed Top 100 / Bottom 100
-        print(f"\n📈 Version 1: Fixed Top 100 / Bottom 100")
+        # VERSION 1: Top 10% Long / Bottom 5% Short
+        print(f"\n📈 Version 1: Top 10% Long / Bottom 5% Short (Decile)")
         print("-" * 60)
-        portfolio_results_fixed = []
+        portfolio_results_v1 = []
 
         for year in sorted(portfolio_data['form_year'].unique()):
             year_data = portfolio_data[portfolio_data['form_year'] == year].copy()
@@ -1456,51 +1456,16 @@ if final_predictions is not None and RUN_PRED:
                 continue
 
             year_data = year_data.sort_values('predicted_return', ascending=False)
-            
-            long_portfolio = year_data.head(100)
-            short_portfolio = year_data.tail(100)
 
-            long_return = long_portfolio[CONFIG['dep_var']].mean()
-            short_return = -short_portfolio[CONFIG['dep_var']].mean()
-            spread = long_return - short_return
-
-            portfolio_results_fixed.append({
-                'year': year,
-                'long_return': long_return,
-                'short_return': short_return,
-                'spread': spread,
-                'n_long': len(long_portfolio),
-                'n_short': len(short_portfolio)
-            })
-
-            print(f"  Year {year:.0f}: Long {len(long_portfolio)}, Short {len(short_portfolio)}")
-
-        portfolio_df_fixed = pd.DataFrame(portfolio_results_fixed)
-        portfolio_file_fixed = output_dir / 'portfolio_returns_fixed100.csv'
-        portfolio_df_fixed.to_csv(portfolio_file_fixed, index=False)
-        print(f"✅ Saved to: {portfolio_file_fixed.name}")
-
-        # VERSION 2: Decile (10% / 5%)
-        print(f"\n📈 Version 2: Decile (Top 10% / Bottom 5%)")
-        print("-" * 60)
-        portfolio_results_decile = []
-
-        for year in sorted(portfolio_data['form_year'].unique()):
-            year_data = portfolio_data[portfolio_data['form_year'] == year].copy()
-            if len(year_data) < 200:
-                continue
-
-            year_data = year_data.sort_values('predicted_return', ascending=False)
-            
             n_stocks = len(year_data)
-            long_portfolio = year_data.head(n_stocks // 10)
-            short_portfolio = year_data.tail(n_stocks // 20)
+            long_portfolio = year_data.head(n_stocks // 10)   # Top 10%
+            short_portfolio = year_data.tail(n_stocks // 20)  # Bottom 5%
 
             long_return = long_portfolio[CONFIG['dep_var']].mean()
             short_return = -short_portfolio[CONFIG['dep_var']].mean()
             spread = long_return - short_return
 
-            portfolio_results_decile.append({
+            portfolio_results_v1.append({
                 'year': year,
                 'long_return': long_return,
                 'short_return': short_return,
@@ -1511,12 +1476,50 @@ if final_predictions is not None and RUN_PRED:
 
             print(f"  Year {year:.0f}: Long {len(long_portfolio)}, Short {len(short_portfolio)}")
 
-        portfolio_df_decile = pd.DataFrame(portfolio_results_decile)
-        portfolio_file_decile = output_dir / 'portfolio_returns_decile10pct.csv'
-        portfolio_df_decile.to_csv(portfolio_file_decile, index=False)
-        print(f"✅ Saved to: {portfolio_file_decile.name}")
+        portfolio_df_v1 = pd.DataFrame(portfolio_results_v1)
+        portfolio_file_v1 = output_dir / 'portfolio_returns_10pct_short5pct.csv'
+        portfolio_df_v1.to_csv(portfolio_file_v1, index=False)
+        print(f"✅ Saved to: {portfolio_file_v1.name}")
 
-        portfolio_df = portfolio_df_decile
+        # VERSION 2: Top 10% Long / Bottom 100 Short (Fixed)
+        print(f"\n📈 Version 2: Top 10% Long / Bottom 100 Short (Fixed)")
+        print("-" * 60)
+        portfolio_results_v2 = []
+
+        for year in sorted(portfolio_data['form_year'].unique()):
+            year_data = portfolio_data[portfolio_data['form_year'] == year].copy()
+            if len(year_data) < 200:
+                continue
+
+            year_data = year_data.sort_values('predicted_return', ascending=False)
+
+            n_stocks = len(year_data)
+            long_portfolio = year_data.head(n_stocks // 10)  # Top 10%
+            short_portfolio = year_data.tail(100)            # Bottom 100 tickers
+
+            long_return = long_portfolio[CONFIG['dep_var']].mean()
+            short_return = -short_portfolio[CONFIG['dep_var']].mean()
+            spread = long_return - short_return
+
+            portfolio_results_v2.append({
+                'year': year,
+                'long_return': long_return,
+                'short_return': short_return,
+                'spread': spread,
+                'n_long': len(long_portfolio),
+                'n_short': len(short_portfolio)
+            })
+
+            print(f"  Year {year:.0f}: Long {len(long_portfolio)}, Short {len(short_portfolio)}")
+
+        portfolio_df_v2 = pd.DataFrame(portfolio_results_v2)
+        portfolio_file_v2 = output_dir / 'portfolio_returns_10pct_short100.csv'
+        portfolio_df_v2.to_csv(portfolio_file_v2, index=False)
+        print(f"✅ Saved to: {portfolio_file_v2.name}")
+
+        # Keep both for analysis
+        portfolio_df_fixed = portfolio_df_v1
+        portfolio_df_decile = portfolio_df_v2
 
 else:
     print("\n⚠️ Portfolios not created")
@@ -1541,37 +1544,89 @@ has_decile = 'portfolio_df_decile' in locals() and portfolio_df_decile is not No
 if has_fixed or has_decile:
     print(f"\n📈 Calculating performance metrics...")
 
-    if has_decile:
+    # VERSION 1: Top 10% Long / Bottom 5% Short (Decile)
+    if has_fixed:
         print("\n" + "="*60)
-        print("GENETIC PROGRAMMING RESULTS (Decile 10%)")
+        print("VERSION 1: Top 10% Long / Bottom 5% Short (Decile)")
         print("="*60)
 
-        avg_long = portfolio_df_decile['long_return'].mean()
-        avg_short = portfolio_df_decile['short_return'].mean()
-        avg_spread = portfolio_df_decile['spread'].mean()
-        spread_std = portfolio_df_decile['spread'].std()
-        sharpe = avg_spread / spread_std if spread_std > 0 else 0
+        avg_long_v1 = portfolio_df_fixed['long_return'].mean()
+        avg_short_v1 = portfolio_df_fixed['short_return'].mean()
+        avg_spread_v1 = portfolio_df_fixed['spread'].mean()
+        spread_std_v1 = portfolio_df_fixed['spread'].std()
+        sharpe_v1 = avg_spread_v1 / spread_std_v1 if spread_std_v1 > 0 else 0
 
         print()
         print("Portfolio Returns:")
-        print(f"  Long:   {avg_long:+.4f} ({avg_long*100:+.2f}%)")
-        print(f"  Short:  {avg_short:+.4f} ({avg_short*100:+.2f}%)")
-        print(f"  Spread: {avg_spread:+.4f} ({avg_spread*100:+.2f}%)")
+        print(f"  Long:   {avg_long_v1:+.4f} ({avg_long_v1*100:+.2f}%)")
+        print(f"  Short:  {avg_short_v1:+.4f} ({avg_short_v1*100:+.2f}%)")
+        print(f"  Spread: {avg_spread_v1:+.4f} ({avg_spread_v1*100:+.2f}%)")
         print()
         print("Risk-Adjusted:")
-        print(f"  Volatility:    {spread_std:.4f}")
-        print(f"  Sharpe Ratio:  {sharpe:.2f}")
+        print(f"  Volatility:    {spread_std_v1:.4f}")
+        print(f"  Sharpe Ratio:  {sharpe_v1:.2f}")
+        print()
+        print(f"Analysis Period: {len(portfolio_df_fixed)} years")
+
+    # VERSION 2: Top 10% Long / Bottom 100 Short (Fixed)
+    if has_decile:
+        print("\n" + "="*60)
+        print("VERSION 2: Top 10% Long / Bottom 100 Short (Fixed)")
+        print("="*60)
+
+        avg_long_v2 = portfolio_df_decile['long_return'].mean()
+        avg_short_v2 = portfolio_df_decile['short_return'].mean()
+        avg_spread_v2 = portfolio_df_decile['spread'].mean()
+        spread_std_v2 = portfolio_df_decile['spread'].std()
+        sharpe_v2 = avg_spread_v2 / spread_std_v2 if spread_std_v2 > 0 else 0
+
+        print()
+        print("Portfolio Returns:")
+        print(f"  Long:   {avg_long_v2:+.4f} ({avg_long_v2*100:+.2f}%)")
+        print(f"  Short:  {avg_short_v2:+.4f} ({avg_short_v2*100:+.2f}%)")
+        print(f"  Spread: {avg_spread_v2:+.4f} ({avg_spread_v2*100:+.2f}%)")
+        print()
+        print("Risk-Adjusted:")
+        print(f"  Volatility:    {spread_std_v2:.4f}")
+        print(f"  Sharpe Ratio:  {sharpe_v2:.2f}")
         print()
         print(f"Analysis Period: {len(portfolio_df_decile)} years")
 
+    # COMPARISON TABLE
+    if has_fixed and has_decile:
+        print("\n" + "="*60)
+        print("COMPARISON: VERSION 1 vs VERSION 2")
+        print("="*60)
+        print()
+        print("BOTH VERSIONS: Top 10% Long (Same)")
+        print(f"{'Metric':<20} | {'V1: Short 5%':>15} | {'V2: Short 100':>15} | {'Difference':>12}")
+        print("-" * 70)
+        print(f"{'Long Return':<20} | {avg_long_v1*100:>14.2f}% | {avg_long_v2*100:>14.2f}% | {(avg_long_v2-avg_long_v1)*100:>11.2f}%")
+        print(f"{'Short Return':<20} | {avg_short_v1*100:>14.2f}% | {avg_short_v2*100:>14.2f}% | {(avg_short_v2-avg_short_v1)*100:>11.2f}%")
+        print(f"{'Spread':<20} | {avg_spread_v1*100:>14.2f}% | {avg_spread_v2*100:>14.2f}% | {(avg_spread_v2-avg_spread_v1)*100:>11.2f}%")
+        print(f"{'Volatility':<20} | {spread_std_v1:>15.4f} | {spread_std_v2:>15.4f} | {spread_std_v2-spread_std_v1:>12.4f}")
+        print(f"{'Sharpe Ratio':<20} | {sharpe_v1:>15.2f} | {sharpe_v2:>15.2f} | {sharpe_v2-sharpe_v1:>12.2f}")
+
+    # Save summary
+    if has_decile:
         summary = {
-            'method': 'GP_Symbolic',
-            'avg_spread': avg_spread,
-            'sharpe_ratio': sharpe,
+            'method': 'GP_Symbolic_V2',
+            'strategy': 'Top_10pct_Long_Bottom_100_Short',
+            'avg_spread': avg_spread_v2,
+            'sharpe_ratio': sharpe_v2,
             'n_years': len(portfolio_df_decile)
         }
-        
-        pd.DataFrame([summary]).to_csv(output_dir / 'gp_performance_summary.csv', index=False)
+        pd.DataFrame([summary]).to_csv(output_dir / 'gp_performance_summary_v2.csv', index=False)
+
+    if has_fixed:
+        summary = {
+            'method': 'GP_Symbolic_V1',
+            'strategy': 'Top_100_Long_Bottom_100_Short',
+            'avg_spread': avg_spread_v1,
+            'sharpe_ratio': sharpe_v1,
+            'n_years': len(portfolio_df_fixed)
+        }
+        pd.DataFrame([summary]).to_csv(output_dir / 'gp_performance_summary_v1.csv', index=False)
 
 else:
     print("\n⚠️ No performance metrics available")

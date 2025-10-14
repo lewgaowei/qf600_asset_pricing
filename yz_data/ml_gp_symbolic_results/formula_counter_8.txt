@@ -1,0 +1,23 @@
+PySR Evolved Formula for Counter 8
+============================================================
+
+complexity                                        3
+loss                                       0.355348
+equation                          x63 * -0.36328295
+score                                      0.049948
+sympy_format                      x63*(-0.36328295)
+lambda_format    PySRFunction(X=>x63*(-0.36328295))
+Name: 1, dtype: object
+
+Equation Stats:
+  Length: 334
+  Complexity: 3
+  R² on validation: -2.0745
+
+
+Full Equation Hall of Fame:
+============================================================
+   complexity      loss                         equation     score                   sympy_format                                   lambda_format
+0           1  0.392679                       0.06011234  0.000000             0.0601123400000000             PySRFunction(X=>0.0601123400000000)
+1           3  0.355348                x63 * -0.36328295  0.049948              x63*(-0.36328295)              PySRFunction(X=>x63*(-0.36328295))
+2           5  0.353888  (0.41849098 - x42) * 0.41849098  0.002058  (0.41849098 - x42)*0.41849098  PySRFunction(X=>(0.41849098 - x42)*0.41849098)
