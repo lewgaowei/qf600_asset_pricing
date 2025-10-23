@@ -1,0 +1,2 @@
+portfolio_type,avg_long_return,avg_short_return,avg_spread,spread_volatility,sharpe_ratio,total_capital,avg_annual_pnl,total_pnl,avg_portfolio_return,portfolio_return_volatility,sharpe_ratio_dollar,n_years,first_year,last_year
+Fixed_Top100,0.1025111103875465,-0.036750903810786606,0.13926201419833314,0.5173049926777749,0.2692067854931343,1000000,32880.10328837993,394561.2394605591,0.03288010328837993,0.08660448066166458,0.37965822365278945,12,2013.0,2024.0

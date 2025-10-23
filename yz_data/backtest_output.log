@@ -1,0 +1,9 @@
+================================================================================
+05-BACKTESTING: MULTI-MODEL PORTFOLIO ANALYSIS
+================================================================================
+Traceback (most recent call last):
+  File "C:\Users\lewga\Desktop\Education\MQF\Projects\qf600_asset_pricing\yz_data\05-backtesting.py", line 117, in <module>
+    print("\n\U0001f4cb Configuration:")
+  File "C:\Users\lewga\AppData\Local\Programs\Python\Python39\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f4cb' in position 2: character maps to <undefined>

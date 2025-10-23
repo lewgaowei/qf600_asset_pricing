@@ -1,29 +1,22 @@
-PySR Evolved Formula for Counter 22
+Counter 22 - Best Symbolic Regression Equation
 ============================================================
 
-complexity                                                       7
-loss                                                      0.479381
-equation                   ((x106 * x5) / -1.5818905) + 0.10953627
-score                                                     0.011158
-sympy_format                     x106*x5/(-1.5818905) + 0.10953627
-lambda_format    PySRFunction(X=>x106*x5/(-1.5818905) + 0.10953...
-Name: 4, dtype: object
+Equation:
+complexity                                                       6
+loss                                                      0.483634
+equation                     (0.82452255 - abs(x286)) * 0.20620432
+score                                                     0.013696
+sympy_format                   (0.82452255 - Abs(x286))*0.20620432
+lambda_format    PySRFunction(X=>(0.82452255 - Abs(x286))*0.206...
+Name: 3, dtype: object
 
-Equation Stats:
-  Length: 424
-  Complexity: 5
-  R² on validation: -0.0138
+Hyperparameters:
+  Iterations: 20
+  Populations: 20
+  Population Size: 50
+  Maxsize: 20
+  Parsimony: 0.01
 
-
-Full Equation Hall of Fame:
-============================================================
-   complexity      loss                                                                               equation     score                                                          sympy_format                                                                          lambda_format
-0           1  0.495978                                                                            0.111230314  0.000000                                                     0.111230314000000                                                     PySRFunction(X=>0.111230314000000)
-1           4  0.491043                                                                           abs(x0 * x5)  0.003334                                                            Abs(x0*x5)                                                            PySRFunction(X=>Abs(x0*x5))
-2           5  0.487226                                                        0.10953627 + (-0.29148766 * x5)  0.007804                                            0.10953627 - 0.29148766*x5                                            PySRFunction(X=>0.10953627 - 0.29148766*x5)
-3           6  0.484760                                                  abs((x5 * 0.26999894) + -0.094506845)  0.005075                                      Abs(x5*0.26999894 - 0.094506845)                                      PySRFunction(X=>Abs(x5*0.26999894 - 0.094506845))
-4           7  0.479381                                                ((x106 * x5) / -1.5818905) + 0.10953627  0.011158                                     x106*x5/(-1.5818905) + 0.10953627                                     PySRFunction(X=>x106*x5/(-1.5818905) + 0.10953627)
-5           8  0.478996                                          abs(((x5 * x13) * 0.59137064) + -0.094506845)  0.000802                                  Abs(x5*x13*0.59137064 - 0.094506845)                                  PySRFunction(X=>Abs(x5*x13*0.59137064 - 0.094506845))
-6          14  0.477616    abs((x5 * ((0.25616115 * (x13 / 0.59137064)) * (x13 / 0.59137064))) + -0.094506845)  0.000481      Abs(x5*0.25616115*x13*x13/(0.59137064*0.59137064) - 0.094506845)      PySRFunction(X=>Abs(x5*0.25616115*x13*x13/(0.59137064*0.59137064) - 0.094506845))
-7          15  0.476110                0.10953627 + ((((-0.17672795 * x5) * (x5 - x106)) * x13) * (x5 - x106))  0.003158             -0.17672795*x13*x5*(-x106 + x5)*(-x106 + x5) + 0.10953627             PySRFunction(X=>-0.17672795*x13*x5*(-x106 + x5)*(-x106 + x5) + 0.10953627)
-8          16  0.476073  (x5 * (0.25616115 * ((x13 + x21) * ((x235 - x13) - 0.59137064)))) + abs(-0.094506845)  0.000076  x5*0.25616115*(x13 + x21)*(-x13 + x235 - 1*0.59137064) + 0.094506845  PySRFunction(X=>x5*0.25616115*(x13 + x21)*(-x13 + x235 - 1*0.59137064) + 0.094506845)
+Performance:
+  CV R²: -0.0138
+  CV MSE: 0.435909

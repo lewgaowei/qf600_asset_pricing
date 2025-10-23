@@ -1,0 +1,2 @@
+rfe_method,features_before,features_after,features_eliminated,elimination_percentage,step_size,importance_type,runtime_minutes,cv_splits,optimal_features,best_cv_score
+RFECV,2844,344,2500,87.9043600562588,100,gain,4.053879102071126,3,344,0.1469450608930838

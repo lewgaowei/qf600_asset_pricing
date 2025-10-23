@@ -1,0 +1,440 @@
+================================================================================
+STRATEGY 5: MONTHLY STOP LOSS IMPLEMENTATION PLAN
+================================================================================
+Version: Option A - Full Monthly Tracking with Dynamic Stop Loss
+Author: Claude Code
+Date: 2025-10-23
+================================================================================
+
+OVERVIEW
+--------
+This plan outlines the implementation of a sophisticated stop loss strategy
+that tracks positions month-by-month throughout the holding period, closing
+positions when they hit the 50% stop loss threshold and optionally reinvesting
+capital.
+
+CURRENT LIMITATION
+------------------
+The existing dataset (signals_with_returns_and_tickers_{year}.parquet) contains:
+- Annual returns only (ret column = 12-month return)
+- Form date (form_date) - when the portfolio is formed
+- No intra-year price or return tracking
+
+REQUIRED DATA
+-------------
+To implement monthly stop loss tracking, you need:
+
+1. Monthly Stock Returns from CRSP
+   - Data source: CRSP Monthly Stock File
+   - Required fields:
+     * permno (stock identifier)
+     * date (monthly date)
+     * ret (monthly return)
+     * prc (monthly price - optional but helpful)
+     * vol (monthly volume - optional for liquidity checks)
+
+2. Risk-Free Rate (Monthly)
+   - Fama-French monthly risk-free rate
+   - Or use existing annual rf divided by 12 (approximation)
+
+3. Merge Logic
+   - Match by: permno
+   - Time window: 12 months following form_date for each stock
+   - Example: If form_date = 2010-06-30, track returns from July 2010 to June 2011
+
+================================================================================
+IMPLEMENTATION STEPS
+================================================================================
+
+STEP 1: DATA PREPARATION
+-------------------------
+
+1.1 Obtain Monthly CRSP Returns
+   - Download CRSP monthly returns for your sample period (2000-present)
+   - File format: parquet or CSV
+   - Ensure permno linkage is correct
+
+1.2 Create Monthly Return Dataset
+   Script: 00-prepare-monthly-returns.py
+
+   Input:
+   - CRSP monthly returns file
+   - signals_with_returns_and_tickers_{year}.parquet (for permnos and form_dates)
+
+   Process:
+   a) Load CRSP monthly returns
+   b) For each stock-year in predictions:
+      - Identify form_date
+      - Extract next 12 monthly returns
+      - Create dataset: [permno, form_year, month_1, ret_1, month_2, ret_2, ..., month_12, ret_12]
+
+   Output:
+   - monthly_returns_{year}.parquet
+   Columns: [permno, form_year, form_date, ret_m1, ret_m2, ..., ret_m12,
+             cum_ret_m1, cum_ret_m2, ..., cum_ret_m12]
+
+1.3 Merge with Prediction Data
+   - Join monthly_returns with final_predictions on [permno, form_year]
+   - Keep all prediction data + 12 monthly returns
+
+================================================================================
+STEP 2: STOP LOSS TRACKING ALGORITHM
+================================================================================
+
+2.1 Position-Level Tracking Function
+
+def track_position_with_stoploss(monthly_returns, stop_loss_pct=0.50,
+                                  reinvest=False):
+    """
+    Track a single position month-by-month and apply stop loss.
+
+    Parameters:
+    -----------
+    monthly_returns : array-like
+        Monthly returns for the position (12 months)
+    stop_loss_pct : float
+        Stop loss threshold (0.50 = 50% loss)
+    reinvest : bool
+        If True, reinvest stopped-out capital
+
+    Returns:
+    --------
+    dict with:
+        - final_return: realized return after stop loss
+        - stopped_out: True if stopped out
+        - stop_month: month when stopped (or None)
+        - months_held: number of months position was held
+    """
+    cumulative_return = 0.0
+    position_active = True
+    stop_month = None
+
+    for month_idx, monthly_ret in enumerate(monthly_returns, 1):
+        if not position_active:
+            break
+
+        # Update cumulative return
+        cumulative_return = (1 + cumulative_return) * (1 + monthly_ret) - 1
+
+        # Check stop loss (for short positions, flip the sign)
+        # For short: we lose money when stock goes up
+        # Stop loss triggers when loss exceeds threshold
+        if cumulative_return < -stop_loss_pct:
+            stop_month = month_idx
+            position_active = False
+            cumulative_return = -stop_loss_pct  # Cap at stop loss
+            break
+
+    return {
+        'final_return': cumulative_return,
+        'stopped_out': stop_month is not None,
+        'stop_month': stop_month,
+        'months_held': stop_month if stop_month else 12
+    }
+
+2.2 Portfolio-Level Tracking
+
+For each year:
+    1. Select long portfolio (top 10%)
+    2. Select short portfolio (bottom 100)
+
+    For long positions:
+        - Track normally (optional: apply stop loss here too)
+        - Calculate return: sum of individual stock returns
+
+    For short positions:
+        - For each stock:
+            a) Get 12 monthly returns
+            b) Flip sign (short position: -ret)
+            c) Apply track_position_with_stoploss()
+            d) Record: final_return, stopped_out, stop_month
+        - Aggregate:
+            * Average return across all shorts
+            * Count stopped positions
+            * Average holding period
+
+2.3 Capital Reallocation (Optional Enhancement)
+
+    Option A: Cash Position
+        - When position stops out, hold cash (0% return)
+        - Simplest approach
+
+    Option B: Reinvest in Remaining Positions
+        - When position stops out, distribute capital to active positions
+        - More realistic but complex
+
+    Option C: Reinvest in New Stocks
+        - Maintain replacement pool (next worst stocks)
+        - Most realistic but most complex
+
+================================================================================
+STEP 3: CODE STRUCTURE
+================================================================================
+
+3.1 New Script: 03b-machine-learning-xgboost-monthly-stoploss.py
+
+Key Modifications from original 03-machine-learning-xgboost.py:
+
+# After Step 8 (predictions), add:
+
+# ------------------------------
+# STEP 8.5: Load Monthly Returns
+# ------------------------------
+print("\n" + "=" * 60)
+print("STEP 8.5: LOADING MONTHLY RETURNS FOR STOP LOSS TRACKING")
+print("=" * 60)
+
+monthly_returns_path = _base_dir / f"monthly_returns_{START_YEAR}.parquet"
+monthly_df = pd.read_parquet(monthly_returns_path)
+
+# Merge with predictions
+final_predictions = final_predictions.merge(
+    monthly_df,
+    on=['permno', 'form_year'],
+    how='left'
+)
+
+print(f"✅ Monthly returns loaded: {monthly_df.shape}")
+print(f"✅ Merged with predictions: {final_predictions.shape}")
+
+# ------------------------------
+# STEP 9: Build Portfolios with Monthly Stop Loss
+# ------------------------------
+
+# Add VERSION 6: Monthly Stop Loss Tracking
+print(f"\n📈 Building portfolios - VERSION 6: Monthly Stop Loss (Realistic)")
+print("-" * 60)
+
+portfolio_results_monthly_sl = []
+STOP_LOSS_THRESHOLD = 0.50  # 50% loss limit
+
+for year in sorted(portfolio_data['form_year'].unique()):
+    year_data = portfolio_data[portfolio_data['form_year'] == year].copy()
+
+    if len(year_data) < 200:
+        continue
+
+    # Select portfolios
+    year_data = year_data.sort_values('predicted_return', ascending=False)
+    n_stocks = len(year_data)
+    top_n = max(1, int(n_stocks * 0.10))
+    bottom_n = 100
+
+    long_portfolio = year_data.head(top_n)
+    short_portfolio = year_data.tail(bottom_n)
+
+    # LONG PORTFOLIO: Simple average (or apply stop loss)
+    long_return = long_portfolio[CONFIG['dep_var']].mean()
+
+    # SHORT PORTFOLIO: Apply monthly stop loss tracking
+    short_returns = []
+    stopped_count = 0
+    total_months_held = 0
+
+    for idx, row in short_portfolio.iterrows():
+        # Extract 12 monthly returns
+        monthly_rets = [row[f'ret_m{i}'] for i in range(1, 13)]
+
+        # For short: flip returns (we profit when stock goes down)
+        monthly_rets_short = [-r for r in monthly_rets]
+
+        # Track with stop loss
+        result = track_position_with_stoploss(
+            monthly_rets_short,
+            stop_loss_pct=STOP_LOSS_THRESHOLD
+        )
+
+        short_returns.append(result['final_return'])
+        if result['stopped_out']:
+            stopped_count += 1
+        total_months_held += result['months_held']
+
+    short_return = np.mean(short_returns)
+    spread = long_return - short_return
+
+    # Calculate dollar metrics (same as before)
+    n_long = len(long_portfolio)
+    n_short = len(short_portfolio)
+    long_capital = TOTAL_CAPITAL * 0.5
+    short_capital = TOTAL_CAPITAL * 0.5
+
+    position_size_long = long_capital / n_long
+    position_size_short = short_capital / n_short
+
+    dollar_pnl_long = long_capital * long_return
+    dollar_pnl_short = short_capital * short_return
+    total_dollar_pnl = dollar_pnl_long + dollar_pnl_short
+    portfolio_return = total_dollar_pnl / TOTAL_CAPITAL
+
+    portfolio_results_monthly_sl.append({
+        'year': year,
+        'long_return': long_return,
+        'short_return': short_return,
+        'spread': spread,
+        'n_long': n_long,
+        'n_short': n_short,
+        'n_stopped_out': stopped_count,
+        'stopped_out_pct': (stopped_count / n_short) * 100,
+        'avg_months_held': total_months_held / n_short,
+        # Dollar metrics
+        'long_capital': long_capital,
+        'short_capital': short_capital,
+        'dollar_pnl_long': dollar_pnl_long,
+        'dollar_pnl_short': dollar_pnl_short,
+        'total_dollar_pnl': total_dollar_pnl,
+        'portfolio_return': portfolio_return
+    })
+
+# Save results
+portfolio_df_monthly_sl = pd.DataFrame(portfolio_results_monthly_sl)
+portfolio_file = output_dir / 'portfolio_returns_monthly_stoploss.csv'
+portfolio_df_monthly_sl.to_csv(portfolio_file, index=False)
+
+================================================================================
+STEP 4: VALIDATION & TESTING
+================================================================================
+
+4.1 Sanity Checks
+    - Verify stopped positions have return exactly at -50%
+    - Check that non-stopped positions match annual return
+    - Ensure months_held <= 12 for all positions
+    - Validate cumulative returns match manual calculation
+
+4.2 Comparison Analysis
+    - Compare to Strategy 5 (simple cap)
+    - Compare to Strategy 4 (no stop loss)
+    - Analyze: Does monthly tracking show different results?
+
+4.3 Statistical Tests
+    - t-test: Monthly SL vs Simple Cap returns
+    - Correlation: How often does simple cap approximate monthly?
+    - Timing: When (which month) do most stops occur?
+
+================================================================================
+STEP 5: ADVANCED ENHANCEMENTS
+================================================================================
+
+5.1 Dynamic Stop Loss
+    - Trailing stop loss (moves with profit)
+    - Volatility-adjusted stop loss (based on stock's historical vol)
+
+5.2 Partial Position Closing
+    - Close 50% of position at 25% loss
+    - Close remaining 50% at 40% loss
+
+5.3 Profit Taking
+    - Take profits at +30% gain
+    - Lock in gains to reduce drawdown
+
+5.4 Transaction Costs
+    - Add trading costs when closing stopped positions
+    - Model slippage and market impact
+
+================================================================================
+STEP 6: EXPECTED OUTCOMES
+================================================================================
+
+Comparison: Simple Cap (Option B) vs Monthly Tracking (Option A)
+
+Expected Results:
+1. Monthly tracking will show LOWER returns than simple cap
+   - Reason: Some positions stopped early miss recovery
+
+2. Monthly tracking will show LOWER volatility
+   - Reason: Losses are truly limited, not just capped at end
+
+3. Higher Sharpe ratio possible with monthly tracking
+   - Reason: Risk reduction may outweigh return reduction
+
+4. Average months held: 6-8 months (not full 12)
+   - Many positions will stop out mid-year
+
+5. Stop-out rate: 20-40% of short positions
+   - In bad years (shorts go up), many will hit stop loss
+
+================================================================================
+IMPLEMENTATION TIMELINE
+================================================================================
+
+1. Data Preparation:       2-3 days
+   - Obtain CRSP monthly data
+   - Create monthly returns dataset
+   - Merge with predictions
+
+2. Core Algorithm:          1-2 days
+   - Implement tracking function
+   - Test on single year
+   - Validate calculations
+
+3. Full Backtest:           1 day
+   - Run across all years
+   - Generate results
+   - Create visualizations
+
+4. Analysis & Reporting:    1-2 days
+   - Compare strategies
+   - Statistical analysis
+   - Write summary report
+
+Total: 5-8 days
+
+================================================================================
+DELIVERABLES
+================================================================================
+
+1. Data:
+   - monthly_returns_{year}.parquet
+   - portfolio_returns_monthly_stoploss.csv
+
+2. Code:
+   - 00-prepare-monthly-returns.py
+   - 03b-machine-learning-xgboost-monthly-stoploss.py
+
+3. Analysis:
+   - performance_comparison_monthly_vs_simple.csv
+   - stop_loss_timing_analysis.csv
+   - strategy_comparison_report.pdf
+
+================================================================================
+NOTES & CONSIDERATIONS
+================================================================================
+
+1. Data Quality:
+   - Check for missing monthly returns
+   - Handle delistings (stock disappears mid-year)
+   - Handle splits and dividends (CRSP should adjust automatically)
+
+2. Survivorship Bias:
+   - Delisted stocks often have worst returns
+   - Missing data for bankruptcies could bias results upward
+   - Solution: Use CRSP delisting returns when available
+
+3. Liquidity:
+   - Some stocks may not be liquid enough to exit at stop loss
+   - Consider adding volume filters
+   - Model realistic execution prices
+
+4. Computational Cost:
+   - Monthly tracking is 12x more computations
+   - Optimize with vectorization (NumPy)
+   - Consider parallel processing for large datasets
+
+================================================================================
+REFERENCES
+================================================================================
+
+1. CRSP Data Access:
+   - WRDS: https://wrds-www.wharton.upenn.edu/
+   - Requires institutional access
+
+2. Stop Loss Literature:
+   - Kaminski & Lo (2014): "When Do Stop-Loss Rules Stop Losses?"
+   - Han, Zhou & Zhu (2016): "A Trend Factor"
+
+3. Backtesting Best Practices:
+   - Bailey et al. (2017): "The Probability of Backtest Overfitting"
+   - Harvey, Liu & Zhu (2016): "...and the Cross-Section of Expected Returns"
+
+================================================================================
+END OF PLAN
+================================================================================

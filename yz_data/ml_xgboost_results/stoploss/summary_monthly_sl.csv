@@ -1,0 +1,2 @@
+total_return_pct,cagr_pct,sharpe_ratio,max_drawdown_pct,win_rate_pct,avg_annual_return_pct,volatility_pct,total_pnl,n_years,model,stop_loss_pct
+124.23995314380176,6.96115473075638,0.8486956870280112,-12.003821045995275,83.33333333333334,10.353329428650152,12.199106920061961,1242399.5314380177,12,xgboost,50.0

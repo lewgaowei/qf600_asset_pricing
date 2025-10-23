@@ -1,0 +1,2 @@
+rfe_method,features_before,features_after,features_eliminated,elimination_percentage,step_size,importance_type,runtime_minutes
+RFE,2844,1000,1844,64.83825597749649,100,gain,1.1732516765594483

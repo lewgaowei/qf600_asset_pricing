@@ -1,25 +1,22 @@
-PySR Evolved Formula for Counter 12
+Counter 12 - Best Symbolic Regression Equation
 ============================================================
 
-complexity                                          4
-loss                                         0.368041
-equation                        abs(x30 * 0.34378147)
-score                                        0.011715
-sympy_format                      0.34378147*Abs(x30)
-lambda_format    PySRFunction(X=>0.34378147*Abs(x30))
-Name: 1, dtype: object
+Equation:
+complexity                                                    5
+loss                                                   0.351932
+equation                        (0.6635517 - x286) * 0.25178123
+score                                                  0.056058
+sympy_format                      (0.6635517 - x286)*0.25178123
+lambda_format    PySRFunction(X=>(0.6635517 - x286)*0.25178123)
+Name: 3, dtype: object
 
-Equation Stats:
-  Length: 346
-  Complexity: 4
-  R² on validation: -0.0238
+Hyperparameters:
+  Iterations: 20
+  Populations: 20
+  Population Size: 50
+  Maxsize: 20
+  Parsimony: 0.01
 
-
-Full Equation Hall of Fame:
-============================================================
-   complexity      loss                                                  equation     score                                                    sympy_format                                                                    lambda_format
-0           1  0.381206                                                0.11670302  0.000000                                               0.116703020000000                                               PySRFunction(X=>0.116703020000000)
-1           4  0.368041                                     abs(x30 * 0.34378147)  0.011715                                             0.34378147*Abs(x30)                                             PySRFunction(X=>0.34378147*Abs(x30))
-2           6  0.367887                                abs(x63 - x9) * 0.32831174  0.000210                                        Abs(x63 - x9)*0.32831174                                        PySRFunction(X=>Abs(x63 - x9)*0.32831174)
-3           8  0.364940                abs(-0.0671775 - ((x9 - x63) / 2.4332242))  0.004021  Abs(-0.410977336161625*x63 + 0.410977336161625*x9 + 0.0671775)  PySRFunction(X=>Abs(-0.410977336161625*x63 + 0.410977336161625*x9 + 0.0671775))
-4          10  0.357790  0.097378016 - ((x9 - abs(x63 / 2.4332242)) * 0.47049055)  0.009894      0.097378016 - 0.47049055*(x9 - 0.410977336161625*Abs(x63))      PySRFunction(X=>0.097378016 - 0.47049055*(x9 - 0.410977336161625*Abs(x63)))
+Performance:
+  CV R²: -0.0238
+  CV MSE: 0.303512
